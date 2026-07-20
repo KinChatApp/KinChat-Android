@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="chat_forwarded">Forwarded</string>
+    <string name="chat_edited">edited</string>
+    <string name="chat_message_deleted">🚫 This message was deleted</string>
+    <string name="chat_unsupported_message">Unsupported message type</string>
+    
+    <string name="chat_voice_message">Voice message</string>
+    <string name="chat_document">Document</string>
+    <string name="chat_media_desc">Media attachment</string>
+    
+    <string name="chat_join_call">Join</string>
+    <string name="chat_call_missed_video">Missed video call</string>
+    <string name="chat_call_missed_voice">Missed voice call</string>
+    <string name="chat_call_declined">Call declined</string>
+    <string name="chat_call_cancelled">Call cancelled</string>
+    <string name="chat_call_failed">Call failed</string>
+    <string name="chat_calling">Calling…</string>
+    <string name="chat_incoming_video">Incoming video call</string>
+    <string name="chat_incoming_voice">Incoming voice call</string>
+    <string name="chat_call_video">Video call</string>
+    <string name="chat_call_voice">Voice call</string>
+
+    <string name="desc_reply">Swipe to reply</string>
+    <string name="desc_play_audio">Play audio</string>
+    <string name="desc_pause_audio">Pause audio</string>
+    <string name="desc_download">Download file</string>
+    <string name="desc_sent">Sent</string>
+    <string name="desc_delivered">Delivered</string>
+    <string name="desc_read">Read</string>
+    <string name="desc_call_icon">Call status icon</string>
+</resources>
