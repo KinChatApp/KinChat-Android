@@ -14,6 +14,6 @@ dependencyResolutionManagement {
   }
 }
 
-rootProject.name = "TukTak"
+rootProject.name = "KinChat"
 
 include(":app")
