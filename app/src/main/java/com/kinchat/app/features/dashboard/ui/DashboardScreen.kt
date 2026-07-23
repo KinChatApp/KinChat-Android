@@ -18,7 +18,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.kinchat.app.features.dashboard.ui.components.ChatContextMenuBottomSheet
+import com.kinchat.app.features.chat.ui.components.ChatContextMenu
 import com.kinchat.app.features.dashboard.ui.components.ChatFilterTabs
 import com.kinchat.app.features.dashboard.ui.components.ChatListSection
 import com.kinchat.app.features.dashboard.ui.components.HomeHeader
@@ -36,8 +36,7 @@ fun DashboardScreen(
     viewModel: DashboardViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    
-    // সিলেক্টেড ট্যাবের স্টেট
+
     var selectedFilter by remember { mutableStateOf("All") }
 
     Scaffold(
@@ -58,27 +57,30 @@ fun DashboardScreen(
                 .padding(paddingValues)
                 .background(MaterialTheme.colorScheme.background)
         ) {
-            
-            // চ্যাট লিস্টের উপরে ফিল্টার ট্যাব
             ChatFilterTabs(
                 selectedFilter = selectedFilter,
                 onFilterSelected = { selectedFilter = it }
             )
 
-            // নতুন ছোট করা চ্যাট লিস্ট সেকশন
             ChatListSection(
                 isLoading = uiState.isLoading,
-                chats = uiState.chats, // ভবিষ্যতে এখানে selectedFilter অনুযায়ী ফিল্টার করা লিস্ট পাস করবেন
+                chats = uiState.chats,
                 onChatClick = onNavigateToChat,
                 onChatLongPress = viewModel::openContextMenu
             )
         }
 
+        // সঠিক Context Menu কল করা হচ্ছে
         uiState.selectedChatForMenu?.let { chat ->
-            ChatContextMenuBottomSheet(
-                chat = chat,
-                onDismiss = viewModel::closeContextMenu,
-                onDeleteClick = viewModel::requestDeleteChat
+            ChatContextMenu(
+                selectedChat = chat,
+                onDismissRequest = viewModel::closeContextMenu,
+                onPinToggle = { viewModel.pinChat(chat.id) },
+                onFavoriteToggle = { viewModel.favoriteChat(chat.id) },
+                onArchiveToggle = { viewModel.archiveChat(chat.id) },
+                onMuteToggle = { viewModel.muteChat(chat.id) },
+                onBlockToggle = { viewModel.blockChat(chat.id) },
+                onDelete = viewModel::requestDeleteChat
             )
         }
 
@@ -88,7 +90,9 @@ fun DashboardScreen(
                 title = { Text("Delete Chat") },
                 text = { Text("Are you sure you want to delete this chat?") },
                 confirmButton = {
-                    TextButton(onClick = { viewModel.uiState.value.selectedChatForMenu?.id?.let { viewModel.confirmDeleteChat(it) } }) {
+                    TextButton(onClick = { 
+                        viewModel.uiState.value.selectedChatForMenu?.id?.let { viewModel.confirmDeleteChat(it) } 
+                    }) {
                         Text("Delete", color = Color.Red)
                     }
                 },

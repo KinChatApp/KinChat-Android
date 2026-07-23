@@ -6,8 +6,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.NotificationsOff
+import androidx.compose.material.icons.filled.PushPin
+import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.NotificationsActive
+import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -17,19 +21,19 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.kinchat.app.domain.model.ChatThread
+import com.kinchat.app.domain.model.Chat
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatContextMenu(
-    selectedChat: ChatThread?,
+    selectedChat: Chat?,
     onDismissRequest: () -> Unit,
-    onArchive: () -> Unit,
+    onPinToggle: () -> Unit,
+    onFavoriteToggle: () -> Unit,
+    onArchiveToggle: () -> Unit,
     onMuteToggle: () -> Unit,
     onBlockToggle: () -> Unit,
-    onDelete: () -> Unit,
-    isMuted: Boolean = false,
-    isBlocked: Boolean = false
+    onDelete: () -> Unit
 ) {
     if (selectedChat == null) return
 
@@ -51,47 +55,47 @@ fun ChatContextMenu(
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)
             )
-            
+
             HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
 
             ContextMenuItem(
-                icon = Icons.Default.Archive,
-                label = "Archive Chat",
-                onClick = {
-                    onArchive()
-                    onDismissRequest()
-                }
+                icon = if (selectedChat.isPinned) Icons.Default.PushPin else Icons.Outlined.PushPin,
+                label = if (selectedChat.isPinned) "Unpin Chat" else "Pin Chat",
+                onClick = { onPinToggle(); onDismissRequest() }
             )
 
             ContextMenuItem(
-                icon = if (isMuted) Icons.Outlined.NotificationsActive else Icons.Default.NotificationsOff,
-                label = if (isMuted) "Unmute Notifications" else "Mute Notifications",
-                onClick = {
-                    onMuteToggle()
-                    onDismissRequest()
-                }
+                icon = if (selectedChat.isFavorite) Icons.Default.Favorite else Icons.Outlined.FavoriteBorder,
+                label = if (selectedChat.isFavorite) "Remove from Favorites" else "Add to Favorites",
+                onClick = { onFavoriteToggle(); onDismissRequest() }
+            )
+
+            ContextMenuItem(
+                icon = Icons.Default.Archive,
+                label = if (selectedChat.isArchived) "Unarchive Chat" else "Archive Chat",
+                onClick = { onArchiveToggle(); onDismissRequest() }
+            )
+
+            ContextMenuItem(
+                icon = if (selectedChat.isMuted) Icons.Outlined.NotificationsActive else Icons.Default.NotificationsOff,
+                label = if (selectedChat.isMuted) "Unmute Notifications" else "Mute Notifications",
+                onClick = { onMuteToggle(); onDismissRequest() }
             )
 
             ContextMenuItem(
                 icon = Icons.Default.Block,
-                label = if (isBlocked) "Unblock User" else "Block User",
-                onClick = {
-                    onBlockToggle()
-                    onDismissRequest()
-                }
+                label = if (selectedChat.isBlocked) "Unblock User" else "Block User",
+                onClick = { onBlockToggle(); onDismissRequest() }
             )
 
             HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
 
             ContextMenuItem(
                 icon = Icons.Default.Delete,
-                label = "Delete Conversation",
+                label = "Delete Chat",
                 iconTint = MaterialTheme.colorScheme.error,
                 textColor = MaterialTheme.colorScheme.error,
-                onClick = {
-                    onDelete()
-                    onDismissRequest()
-                }
+                onClick = { onDelete(); onDismissRequest() }
             )
         }
     }

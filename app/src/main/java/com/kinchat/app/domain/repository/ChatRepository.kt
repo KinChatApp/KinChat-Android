@@ -4,7 +4,6 @@ import com.kinchat.app.domain.model.ChatMessage
 import kotlinx.coroutines.flow.Flow
 
 interface ChatRepository {
-    // 🚀 আপডেট: হার্ডকোড স্ট্রিং এড়াতে Nullable String রিটার্ন করবে
     suspend fun getPartnerName(chatId: String, currentUserId: String): String?
     suspend fun addReaction(messageId: String, userId: String, reactionType: String): Result<Unit>
     suspend fun checkIsSaved(messageId: String, userId: String): Boolean
@@ -14,7 +13,13 @@ interface ChatRepository {
     suspend fun updateLastRead(chatId: String, userId: String): Result<Unit>
     suspend fun sendMessage(chatId: String, senderId: String, content: String, replyToId: String? = null): Result<Unit>
     fun observeMessages(chatId: String): Flow<List<ChatMessage>>
-    
-    // 🚀 নতুন অ্যাড করা হলো: চ্যাট আইডি তৈরি বা ফেচ করার জন্য
     suspend fun createChatIfNotExists(partnerUserId: String): Result<String>
+
+    // 🚀 Context Menu Actions (Supabase logic)
+    suspend fun updateChatPinStatus(chatId: String, isPinned: Boolean): Result<Unit>
+    suspend fun updateChatFavoriteStatus(chatId: String, isFavorite: Boolean): Result<Unit>
+    suspend fun updateChatArchiveStatus(chatId: String, isArchived: Boolean): Result<Unit>
+    suspend fun updateChatMuteStatus(chatId: String, isMuted: Boolean): Result<Unit>
+    suspend fun updateChatBlockStatus(chatId: String, isBlocked: Boolean): Result<Unit>
+    suspend fun deleteChatParticipant(chatId: String): Result<Unit>
 }

@@ -38,7 +38,7 @@ import kotlinx.coroutines.delay
 
 @Composable
 fun ChatInput(
-    onSendMessage: (String) -> Unit,
+    onSendMessage: (String) -> Boolean, // ✅ এটি এখন Boolean আশা করে
     updateTypingStatus: (Boolean) -> Unit,
     partnerName: String,
     replyingToMessage: ChatMessage? = null,
@@ -141,8 +141,11 @@ fun ChatInput(
                         .background(MaterialTheme.colorScheme.primary)
                         .clickable {
                             if (isTextPresent) {
-                                onSendMessage(text.trim())
-                                text = ""
+                                // ✅ মেসেজটি সাকসেসফুলি এক্সেপ্ট হলে তবেই ক্লিয়ার হবে
+                                val success = onSendMessage(text.trim())
+                                if (success) {
+                                    text = ""
+                                }
                             }
                         },
                     contentAlignment = Alignment.Center

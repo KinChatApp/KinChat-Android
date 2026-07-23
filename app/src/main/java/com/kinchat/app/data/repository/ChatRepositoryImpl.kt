@@ -4,6 +4,8 @@ import android.util.Log
 import com.kinchat.app.domain.model.ChatMessage
 import com.kinchat.app.domain.model.MessageReaction
 import com.kinchat.app.domain.repository.ChatRepository
+import com.kinchat.app.data.local.db.ChatMessageDao
+import com.kinchat.app.data.local.db.ChatMessageEntity
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.gotrue.auth
 import io.github.jan.supabase.postgrest.postgrest
@@ -15,9 +17,8 @@ import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
@@ -40,13 +41,13 @@ data class MessageInsertPayload(
 
 @Singleton
 class ChatRepositoryImpl @Inject constructor(
-    private val supabaseClient: SupabaseClient
+    private val supabaseClient: SupabaseClient,
+    private val chatMessageDao: ChatMessageDao // 🚀 Room DAO Inject করা হলো
 ) : ChatRepository {
 
     private val savedMessagesCache = ConcurrentHashMap<String, Boolean>()
     private val partnerNameCache = ConcurrentHashMap<String, String>()
 
-    // ক্র্যাশ ঠেকানোর জন্য সেফ স্কোপ
     private val safeScope = CoroutineScope(Dispatchers.IO + SupervisorJob() + CoroutineExceptionHandler { _, e ->
         Log.e("ChatRepository", "SafeScope caught error: ${e.message}")
     })
@@ -56,6 +57,9 @@ class ChatRepositoryImpl @Inject constructor(
         isLenient = true
         coerceInputValues = true
     }
+
+    private val currentUserId: String?
+        get() = supabaseClient.auth.currentUserOrNull()?.id
 
     override suspend fun getPartnerName(chatId: String, currentUserId: String): String? {
         val cacheKey = "${chatId}_${currentUserId}"
@@ -147,94 +151,76 @@ class ChatRepositoryImpl @Inject constructor(
         supabaseClient.postgrest["messages"].insert(payload)
     }
 
-    override fun observeMessages(chatId: String): Flow<List<ChatMessage>> = callbackFlow {
-        val currentMessages = mutableListOf<ChatMessage>()
-
-        launch {
+    // 🚀 Offline-first আর্কিটেকচার ইমপ্লিমেন্ট করা হয়েছে
+    override fun observeMessages(chatId: String): Flow<List<ChatMessage>> {
+        // ১. ব্যাকগ্রাউন্ডে Supabase থেকে ডেটা সিঙ্ক করা
+        safeScope.launch {
             try {
+                // সার্ভার থেকে লেটেস্ট চ্যাট লোড করে Room-এ সেভ করা
                 val rawJsonArray = supabaseClient.postgrest["messages"]
                     .select { filter { eq("chat_id", chatId) } }
                     .decodeList<JsonObject>()
-
-                for (jsonObj in rawJsonArray) {
+                
+                val entities = rawJsonArray.mapNotNull { jsonObj ->
                     try {
-                        currentMessages.add(safeJsonParser.decodeFromJsonElement<ChatMessage>(jsonObj))
-                    } catch (e: Exception) { Log.e("ChatError", "Parse error: ${e.message}") }
+                        val id = jsonObj["id"]?.toString()?.replace("\"", "") ?: return@mapNotNull null
+                        val createdAt = jsonObj["created_at"]?.toString()?.replace("\"", "") ?: ""
+                        ChatMessageEntity(id, chatId, createdAt, jsonObj.toString())
+                    } catch (e: Exception) { null }
                 }
-                trySend(currentMessages.toList())
-            } catch (e: Exception) {
-                Log.e("ChatRepository", "Initial fetch error", e)
-            }
-        }
+                chatMessageDao.insertMessages(entities)
 
-        val channel = supabaseClient.channel("realtime_messages_$chatId")
-        val messagesFlow = channel.postgresChangeFlow<PostgresAction>(schema = "public") {
-            table = "messages"
-            filter = "chat_id=eq.$chatId"
-        }
+                // রিয়েল-টাইম চ্যানেল দিয়ে লিসেন করা
+                val channel = supabaseClient.channel("realtime_messages_$chatId")
+                val messagesFlow = channel.postgresChangeFlow<PostgresAction>(schema = "public") {
+                    table = "messages"
+                    filter = "chat_id=eq.$chatId"
+                }
 
-        val realtimeJob = launch {
-            try {
                 messagesFlow.collect { action ->
                     when (action) {
                         is PostgresAction.Insert -> {
-                            try {
-                                val newMsg = safeJsonParser.decodeFromJsonElement<ChatMessage>(action.record)
-                                currentMessages.add(newMsg)
-                                trySend(currentMessages.toList())
-                            } catch (e: Exception) { /* Ignore */ }
+                            val id = action.record["id"]?.toString()?.replace("\"", "") ?: return@collect
+                            val createdAt = action.record["created_at"]?.toString()?.replace("\"", "") ?: ""
+                            chatMessageDao.insertMessage(ChatMessageEntity(id, chatId, createdAt, action.record.toString()))
                         }
                         is PostgresAction.Update -> {
-                            try {
-                                val updatedMsg = safeJsonParser.decodeFromJsonElement<ChatMessage>(action.record)
-                                val index = currentMessages.indexOfFirst { it.id == updatedMsg.id }
-                                if (index != -1) {
-                                    currentMessages[index] = updatedMsg
-                                    trySend(currentMessages.toList())
-                                }
-                            } catch (e: Exception) { /* Ignore */ }
+                            val id = action.record["id"]?.toString()?.replace("\"", "") ?: return@collect
+                            val createdAt = action.record["created_at"]?.toString()?.replace("\"", "") ?: ""
+                            chatMessageDao.insertMessage(ChatMessageEntity(id, chatId, createdAt, action.record.toString()))
                         }
                         is PostgresAction.Delete -> {
                             val deletedId = action.oldRecord["id"]?.toString()?.replace("\"", "")
-                            currentMessages.removeAll { it.id == deletedId }
-                            trySend(currentMessages.toList())
+                            if (deletedId != null) chatMessageDao.deleteMessage(deletedId)
                         }
                         else -> {}
                     }
                 }
+                channel.subscribe()
             } catch (e: Exception) {
-                Log.e("ChatRepository", "WebSocket or Network Error: ${e.message}")
+                Log.e("ChatRepository", "Sync Error: ${e.message}")
             }
         }
 
-        try {
-            channel.subscribe()
-        } catch (e: Exception) {
-            Log.e("ChatRepository", "Channel subscribe error", e)
-        }
-
-        awaitClose {
-            realtimeJob.cancel()
-            safeScope.launch {
+        // ২. সরাসরি Room ডেটাবেস থেকে Flow রিটার্ন করা
+        return chatMessageDao.observeMessages(chatId).map { entities ->
+            entities.mapNotNull { entity ->
                 try {
-                    channel.unsubscribe()
-                } catch (e: Exception) {
-                    Log.e("ChatRepository", "Error unsubscribing", e)
-                }
+                    val jsonObj = safeJsonParser.parseToJsonElement(entity.messageJson)
+                    safeJsonParser.decodeFromJsonElement<ChatMessage>(jsonObj)
+                } catch (e: Exception) { null }
             }
         }
     }
 
-    // 🚀 নতুন অ্যাড করা হলো: Supabase RPC কল করে চ্যাট আইডি জেনারেট বা ফেচ করবে
     override suspend fun createChatIfNotExists(partnerUserId: String): Result<String> {
         return withContext(Dispatchers.IO) {
             try {
-                val currentUserId = supabaseClient.auth.currentUserOrNull()?.id
-                    ?: return@withContext Result.failure(Exception("User not authenticated."))
+                val userId = currentUserId ?: return@withContext Result.failure(Exception("User not authenticated."))
 
                 val response = supabaseClient.postgrest.rpc(
                     "create_chat_if_not_exists",
-                    mapOf("user1_id" to currentUserId, "user2_id" to partnerUserId)
+                    mapOf("user1_id" to userId, "user2_id" to partnerUserId)
                 ).decodeAsOrNull<String>()
 
                 val chatId = response?.replace("\"", "")
@@ -248,6 +234,79 @@ class ChatRepositoryImpl @Inject constructor(
                 Log.e("ChatRepositoryImpl", "Error creating chat: ${e.message}", e)
                 Result.failure(e)
             }
+        }
+    }
+
+    override suspend fun updateChatPinStatus(chatId: String, isPinned: Boolean): Result<Unit> = withContext(Dispatchers.IO) {
+        runCatching {
+            val userId = currentUserId ?: throw Exception("Unauthorized")
+            supabaseClient.postgrest["chat_participants"].update(mapOf("is_pinned" to isPinned)) {
+                filter { eq("chat_id", chatId); eq("user_id", userId) }
+            }
+            Unit
+        }
+    }
+
+    override suspend fun updateChatFavoriteStatus(chatId: String, isFavorite: Boolean): Result<Unit> = withContext(Dispatchers.IO) {
+        runCatching {
+            val userId = currentUserId ?: throw Exception("Unauthorized")
+            supabaseClient.postgrest["chat_participants"].update(mapOf("is_favorite" to isFavorite)) {
+                filter { eq("chat_id", chatId); eq("user_id", userId) }
+            }
+            Unit
+        }
+    }
+
+    override suspend fun updateChatArchiveStatus(chatId: String, isArchived: Boolean): Result<Unit> = withContext(Dispatchers.IO) {
+        runCatching {
+            val userId = currentUserId ?: throw Exception("Unauthorized")
+            supabaseClient.postgrest["chat_participants"].update(mapOf("is_archived" to isArchived)) {
+                filter { eq("chat_id", chatId); eq("user_id", userId) }
+            }
+            Unit
+        }
+    }
+
+    override suspend fun updateChatMuteStatus(chatId: String, isMuted: Boolean): Result<Unit> = withContext(Dispatchers.IO) {
+        runCatching {
+            val userId = currentUserId ?: throw Exception("Unauthorized")
+            supabaseClient.postgrest["chat_participants"].update(mapOf("is_muted" to isMuted)) {
+                filter { eq("chat_id", chatId); eq("user_id", userId) }
+            }
+            Unit
+        }
+    }
+
+    override suspend fun updateChatBlockStatus(chatId: String, isBlocked: Boolean): Result<Unit> = withContext(Dispatchers.IO) {
+        runCatching {
+            val userId = currentUserId ?: throw Exception("Unauthorized")
+            val participants = supabaseClient.postgrest["chat_participants"]
+                .select { filter { eq("chat_id", chatId); neq("user_id", userId) } }
+                .decodeList<JsonObject>()
+
+            val partnerId = participants.firstOrNull()?.get("user_id")?.toString()?.replace("\"", "")
+                ?: throw Exception("Partner not found")
+
+            if (isBlocked) {
+                supabaseClient.postgrest["user_blocks"].insert(
+                    mapOf("blocker_id" to userId, "blocked_id" to partnerId)
+                )
+            } else {
+                supabaseClient.postgrest["user_blocks"].delete {
+                    filter { eq("blocker_id", userId); eq("blocked_id", partnerId) }
+                }
+            }
+            Unit
+        }
+    }
+
+    override suspend fun deleteChatParticipant(chatId: String): Result<Unit> = withContext(Dispatchers.IO) {
+        runCatching {
+            val userId = currentUserId ?: throw Exception("Unauthorized")
+            supabaseClient.postgrest["chat_participants"].update(mapOf("is_deleted" to true)) {
+                filter { eq("chat_id", chatId); eq("user_id", userId) }
+            }
+            Unit
         }
     }
 }

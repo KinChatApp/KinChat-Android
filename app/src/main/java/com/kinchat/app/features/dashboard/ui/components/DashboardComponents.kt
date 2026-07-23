@@ -7,9 +7,7 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -35,7 +33,6 @@ fun ChatListItem(
     onLongPress: () -> Unit
 ) {
     val haptic = LocalHapticFeedback.current
-
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -195,6 +192,11 @@ fun AIChatFAB(onClick: () -> Unit) {
 fun ChatContextMenuBottomSheet(
     chat: Chat,
     onDismiss: () -> Unit,
+    onPinClick: () -> Unit = {},
+    onFavoriteClick: () -> Unit = {},
+    onArchiveClick: () -> Unit = {},
+    onMuteClick: () -> Unit = {},
+    onBlockClick: () -> Unit = {},
     onDeleteClick: () -> Unit
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
@@ -210,6 +212,35 @@ fun ChatContextMenuBottomSheet(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             HorizontalDivider()
+            
+            ListItem(
+                headlineContent = { Text("Pin Chat") },
+                leadingContent = { Icon(Icons.Default.PushPin, contentDescription = null) },
+                modifier = Modifier.clickable { onPinClick() }
+            )
+            ListItem(
+                headlineContent = { Text("Add to Favorites") },
+                leadingContent = { Icon(Icons.Default.StarBorder, contentDescription = null) },
+                modifier = Modifier.clickable { onFavoriteClick() }
+            )
+            ListItem(
+                headlineContent = { Text("Archive Chat") },
+                leadingContent = { Icon(Icons.Default.Archive, contentDescription = null) },
+                modifier = Modifier.clickable { onArchiveClick() }
+            )
+            ListItem(
+                headlineContent = { Text("Mute Notifications") },
+                leadingContent = { Icon(Icons.Default.NotificationsOff, contentDescription = null) },
+                modifier = Modifier.clickable { onMuteClick() }
+            )
+            ListItem(
+                headlineContent = { Text("Block User") },
+                leadingContent = { Icon(Icons.Default.Block, contentDescription = null) },
+                modifier = Modifier.clickable { onBlockClick() }
+            )
+            
+            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+            
             ListItem(
                 headlineContent = { Text("Delete Chat", color = MaterialTheme.colorScheme.error) },
                 leadingContent = { Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) },

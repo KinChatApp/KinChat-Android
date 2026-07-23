@@ -45,8 +45,8 @@ class ChatViewModel @Inject constructor(
     val partnerState: StateFlow<PartnerUiState> = _partnerState.asStateFlow()
 
     private val _isPartnerTyping = MutableStateFlow(false)
-    val isPartnerTyping = _isPartnerTyping.asStateFlow()
-
+    val isPartnerTyping = _isPartnerTyping.asStateFlow()                                             
+    
     private val _isPartnerOnline = MutableStateFlow(false)
     val isPartnerOnline = _isPartnerOnline.asStateFlow()
 
@@ -55,7 +55,6 @@ class ChatViewModel @Inject constructor(
     var currentUserId: String = ""
         private set
 
-    // 🚀 AI Bot ID Hardcoded 🚀
     private val AI_BOT_ID = "de438bb4-d954-4c31-9ad1-9dd34b85d981"
 
     fun initializeChat(passedId: String) {
@@ -78,18 +77,15 @@ class ChatViewModel @Inject constructor(
                 var partnerName = chatRepository.getPartnerName(actualChatId, currentUserId)
                 var partnerId = ""
 
-                // 🚀 যদি রিকোয়েস্টটি এআই-এর হয় অথবা নতুন ইউজার হয় 🚀
                 if (passedId == AI_BOT_ID || partnerName == null) {
                     try {
                         Log.d("ChatDebug", "Initializing Chat Room setup...")
-                        
-                        // এআই এর জন্য সরাসরি নাম ও আইডি সেট করা
+
                         if (passedId == AI_BOT_ID) {
                             partnerId = AI_BOT_ID
                             partnerName = "TukTak AI"
                         }
 
-                        // ১. চেক করা যে, আপনাদের দুজনের আগে কোনো চ্যাট রুম আছে কি না
                         val myChats = supabaseClient.postgrest["chat_participants"]
                             .select { filter { eq("user_id", currentUserId) } }
                             .decodeList<ParticipantDto>().mapNotNull { it.chat_id }
@@ -104,14 +100,10 @@ class ChatViewModel @Inject constructor(
                             actualChatId = sharedChatId
                             Log.d("ChatDebug", "Found existing chat room: $actualChatId")
                         } else {
-                            // ২. যদি চ্যাট রুম না থাকে, তাহলে নতুন চ্যাট রুম তৈরি করা
                             Log.d("ChatDebug", "No chat room found. Creating a new one...")
                             val newChatId = UUID.randomUUID().toString()
 
-                            // Chats টেবিলে ইনসার্ট
                             supabaseClient.postgrest["chats"].insert(ChatDto(id = newChatId))
-
-                            // Participants টেবিলে দুজনের ডাটা ইনসার্ট
                             supabaseClient.postgrest["chat_participants"].insert(listOf(
                                 ParticipantDto(chat_id = newChatId, user_id = currentUserId),
                                 ParticipantDto(chat_id = newChatId, user_id = partnerId)
@@ -122,13 +114,11 @@ class ChatViewModel @Inject constructor(
                         }
                     } catch (e: Exception) {
                         Log.e("ChatDebug", "Error in Chat Setup: ${e.message}", e)
-                        // কোনো কারণে ফেইল করলেও যেন এআই-এর নামটা ঠিকঠাক দেখায়
                         if (passedId == AI_BOT_ID) {
                             partnerName = "TukTak AI"
                         }
                     }
                 } else {
-                    // রেগুলার চ্যাটের লজিক
                     try {
                         val participant = supabaseClient.postgrest["chat_participants"]
                             .select {
@@ -155,8 +145,8 @@ class ChatViewModel @Inject constructor(
                     _partnerState.value = PartnerUiState.Error
                 }
 
-                // মেসেজ অবজার্ভ করা শুরু
                 try {
+                    // 🚀 এই অংশটি এখন সরাসরি Room Database (Local Cache) থেকে ফ্লো রিড করবে
                     chatRepository.observeMessages(actualChatId).collectLatest { msgs ->
                         _messages.value = msgs.distinctBy { it.id }.filter { msg ->
                             msg.deletedForUsers?.contains(currentUserId) != true
@@ -175,18 +165,18 @@ class ChatViewModel @Inject constructor(
         }
     }
 
-    fun sendMessage(content: String, replyToId: String? = null) {
+    fun sendMessage(content: String, replyToId: String? = null): Boolean {
         Log.d("ChatDebug", "Send button clicked! Message: $content")
 
         val chatId = currentChatId
         if (chatId == null) {
-            Log.e("ChatDebug", "Error: currentChatId is null!")
-            return
+            Log.e("ChatDebug", "Error: currentChatId is null! Chat setup is incomplete.")
+            return false 
         }
 
         if (currentUserId.isEmpty()) {
             Log.e("ChatDebug", "Error: currentUserId is empty!")
-            return
+            return false
         }
 
         viewModelScope.launch {
@@ -196,6 +186,7 @@ class ChatViewModel @Inject constructor(
                 Log.e("ChatDebug", "Message send failed: ${error?.message}", error)
             }
         }
+        return true 
     }
 
     fun toggleSaveMessage(messageId: String) {

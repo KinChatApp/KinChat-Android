@@ -7,6 +7,9 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DoneAll
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.NotificationsOff
+import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material.icons.outlined.PhotoCamera
@@ -19,24 +22,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
-import com.kinchat.app.domain.model.ChatThread
-import com.kinchat.app.ui.theme.BrandPrimary
-import com.kinchat.app.ui.theme.ForegroundLight
-import com.kinchat.app.ui.theme.MutedForegroundLight
-import com.kinchat.app.ui.theme.Success
+import com.kinchat.app.domain.model.Chat
+import com.kinchat.app.core.utils.ChatFormatters
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ChatListItem(
-    chat: ChatThread,
+    chat: Chat,
     contactName: String? = null,
     onClick: () -> Unit,
     onLongPress: () -> Unit
@@ -45,10 +42,19 @@ fun ChatListItem(
     val hasUnread = chat.unreadCount > 0
     val lastMsg = chat.lastMessage ?: ""
 
+    val primaryColor = MaterialTheme.colorScheme.primary
+    val onSurfaceColor = MaterialTheme.colorScheme.onSurface
+    val onSurfaceVariantColor = MaterialTheme.colorScheme.onSurfaceVariant
+    val surfaceVariantColor = MaterialTheme.colorScheme.surfaceVariant
+    val backgroundColor = MaterialTheme.colorScheme.background
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.background)
+            .background(
+                if (chat.isPinned) surfaceVariantColor.copy(alpha = 0.3f)
+                else backgroundColor
+            )
             .combinedClickable(
                 onClick = onClick,
                 onLongClick = onLongPress
@@ -63,7 +69,7 @@ fun ChatListItem(
             modifier = Modifier
                 .size(56.dp)
                 .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.surfaceVariant),
+                .background(surfaceVariantColor),
             contentScale = ContentScale.Crop
         )
 
@@ -79,28 +85,64 @@ fun ChatListItem(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = displayName,
-                    style = MaterialTheme.typography.titleMedium.copy(
+                // Name & Icons Row
+                Row(
+                    modifier = Modifier.weight(1f),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = displayName,
+                        modifier = Modifier.weight(1f, fill = false),
+                        color = onSurfaceColor,
+                        fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
-                        color = ForegroundLight,
-                        fontSize = 16.sp
-                    ),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f)
-                )
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        style = MaterialTheme.typography.titleMedium
+                    )
+
+                    // Indicators (Mute / Favorite)
+                    if (chat.isFavorite) {
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Icon(
+                            imageVector = Icons.Default.Favorite,
+                            contentDescription = "Favorite",
+                            tint = Color.Red.copy(alpha = 0.8f),
+                            modifier = Modifier.size(14.dp)
+                        )
+                    }
+                    if (chat.isMuted) {
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Icon(
+                            imageVector = Icons.Default.NotificationsOff,
+                            contentDescription = "Muted",
+                            tint = onSurfaceVariantColor,
+                            modifier = Modifier.size(14.dp)
+                        )
+                    }
+                }
 
                 Spacer(modifier = Modifier.width(8.dp))
 
-                Text(
-                    text = chat.timestamp ?: "",
-                    style = MaterialTheme.typography.labelSmall.copy(
+                // Timestamp & Pin Icon
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (chat.isPinned) {
+                        Icon(
+                            imageVector = Icons.Default.PushPin,
+                            contentDescription = "Pinned",
+                            tint = onSurfaceVariantColor,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                    }
+                    Text(
+                        text = chat.timestamp?.let { ChatFormatters.formatChatTime(it) } ?: "",
+                        color = if (hasUnread) primaryColor else onSurfaceVariantColor,
+                        fontSize = 12.sp,
                         fontWeight = if (hasUnread) FontWeight.Bold else FontWeight.Normal,
-                        color = if (hasUnread) BrandPrimary else MutedForegroundLight,
-                        fontSize = 12.sp
+                        style = MaterialTheme.typography.labelSmall
                     )
-                )
+                }
             }
 
             Spacer(modifier = Modifier.height(4.dp))
@@ -119,47 +161,33 @@ fun ChatListItem(
                         Icon(
                             imageVector = Icons.Outlined.PhotoCamera,
                             contentDescription = "Photo",
-                            tint = MutedForegroundLight,
+                            tint = onSurfaceVariantColor,
                             modifier = Modifier.size(16.dp).padding(end = 4.dp)
                         )
                     } else if (lastMsg.contains(Regex("^\\d+:\\d+"))) {
                         Icon(
                             imageVector = Icons.Outlined.Mic,
                             contentDescription = "Voice Message",
-                            tint = Success,
+                            tint = Color(0xFF4CAF50),
                             modifier = Modifier.size(16.dp).padding(end = 4.dp)
                         )
                     } else if (lastMsg.startsWith("Document")) {
                         Icon(
                             imageVector = Icons.Outlined.Description,
                             contentDescription = "Document",
-                            tint = MutedForegroundLight,
+                            tint = onSurfaceVariantColor,
                             modifier = Modifier.size(16.dp).padding(end = 4.dp)
                         )
                     }
 
-                    // Group Sender Highlight (e.g. "Mom: ")
-                    val annotatedMsg = buildAnnotatedString {
-                        val colonIndex = lastMsg.indexOf(":")
-                        if (colonIndex != -1 && colonIndex < 15 && !lastMsg.contains(Regex("^\\d+:\\d+"))) {
-                            withStyle(style = SpanStyle(color = BrandPrimary, fontWeight = FontWeight.Medium)) {
-                                append(lastMsg.substring(0, colonIndex + 1))
-                            }
-                            append(lastMsg.substring(colonIndex + 1))
-                        } else {
-                            append(lastMsg)
-                        }
-                    }
-
                     Text(
-                        text = annotatedMsg,
-                        style = MaterialTheme.typography.bodyMedium.copy(
-                            fontWeight = if (hasUnread) FontWeight.SemiBold else FontWeight.Normal,
-                            color = if (hasUnread) ForegroundLight else MutedForegroundLight
-                        ),
+                        text = lastMsg,
+                        modifier = Modifier.padding(end = 8.dp),
+                        color = if (hasUnread) onSurfaceColor else onSurfaceVariantColor,
+                        fontWeight = if (hasUnread) FontWeight.SemiBold else FontWeight.Normal,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.padding(end = 8.dp)
+                        style = MaterialTheme.typography.bodyMedium
                     )
                 }
 
@@ -167,7 +195,7 @@ fun ChatListItem(
                     Box(
                         modifier = Modifier
                             .sizeIn(minWidth = 22.dp, minHeight = 22.dp)
-                            .background(BrandPrimary, CircleShape)
+                            .background(primaryColor, CircleShape)
                             .padding(horizontal = 6.dp, vertical = 2.dp),
                         contentAlignment = Alignment.Center
                     ) {
@@ -175,14 +203,15 @@ fun ChatListItem(
                             text = chat.unreadCount.toString(),
                             color = Color.White,
                             fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold
+                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.labelSmall
                         )
                     }
                 } else {
                     Icon(
                         imageVector = Icons.Filled.DoneAll,
                         contentDescription = "Read",
-                        tint = Success,
+                        tint = Color(0xFF4CAF50),
                         modifier = Modifier.size(18.dp)
                     )
                 }

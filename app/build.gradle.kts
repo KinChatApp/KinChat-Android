@@ -22,10 +22,9 @@ android {
             useSupportLibrary = true
         }
 
-        // Environment variables mapped to BuildConfig (Updated with your Supabase credentials)
         buildConfigField("String", "SUPABASE_URL", "\"https://iwafvjvelsfrdfbjcmsg.supabase.co\"")
         buildConfigField("String", "SUPABASE_ANON_KEY", "\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml3YWZ2anZlbHNmcmRmYmpjbXNnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEyNzM0ODgsImV4cCI6MjA5Njg0OTQ4OH0.13nCDbbBSjItdXjc4qZeIFCtrvXaoO1q2Xxlq3bN6rw\"")
-        
+
         buildConfigField("String", "UPSTASH_REDIS_REST_URL", "\"https://your-redis-url.upstash.io\"")
         buildConfigField("String", "UPSTASH_REDIS_REST_TOKEN", "\"your-redis-token\"")
     }
@@ -71,7 +70,7 @@ dependencies {
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.navigation:navigation-compose:2.7.7")
-    
+
     // UI Extras (Icons & Animations)
     implementation("androidx.compose.material:material-icons-extended")
     implementation("com.valentinilk.shimmer:compose-shimmer:1.2.0")
@@ -81,16 +80,19 @@ dependencies {
     ksp("com.google.dagger:hilt-android-compiler:2.51.1")
     implementation("androidx.hilt:hilt-navigation-compose:1.2.0")
 
+    // Room Database (Offline First Caching)
+    val roomVersion = "2.6.1"
+    implementation("androidx.room:room-runtime:$roomVersion")
+    implementation("androidx.room:room-ktx:$roomVersion")
+    ksp("androidx.room:room-compiler:$roomVersion")
+
     // Supabase Kotlin SDK
     implementation("io.github.jan-tennert.supabase:postgrest-kt:2.2.3")
     implementation("io.github.jan-tennert.supabase:gotrue-kt:2.2.3")
     implementation("io.github.jan-tennert.supabase:storage-kt:2.2.3")
     implementation("io.github.jan-tennert.supabase:realtime-kt:2.2.3")
-    
-    // 🚀 ফিক্স: android ইঞ্জিন বাদ দিয়ে okhttp ইঞ্জিন যুক্ত করা হলো
-    implementation("io.ktor:ktor-client-okhttp:2.3.9")
 
-    // DataStore (Replaces localStorage)
+    implementation("io.ktor:ktor-client-okhttp:2.3.9")
     implementation("androidx.datastore:datastore-preferences:1.0.0")
 
     // Kotlinx Serialization
@@ -107,14 +109,11 @@ dependencies {
     implementation("com.squareup.retrofit2:converter-moshi:2.11.0")
     ksp("com.squareup.moshi:moshi-kotlin-codegen:1.15.1")
 
-    // Coil & Video Frame Decoding
+    // Coil & Media
     implementation("io.coil-kt:coil-compose:2.6.0")
     implementation("io.coil-kt:coil-video:2.6.0")
-
-    // Media3 (ExoPlayer) for Video Playback
     implementation("androidx.media3:media3-exoplayer:1.2.1")
     implementation("androidx.media3:media3-ui:1.2.1")
-
-    // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
+    implementation("org.jsoup:jsoup:1.17.2")
 }

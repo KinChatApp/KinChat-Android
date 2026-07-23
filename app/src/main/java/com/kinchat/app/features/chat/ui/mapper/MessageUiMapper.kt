@@ -9,6 +9,9 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.intOrNull
 
 object MessageUiMapper {
     private val timeFormatter = DateTimeFormatter.ofPattern("hh:mm a", Locale.getDefault()).withZone(ZoneId.systemDefault())
@@ -18,10 +21,11 @@ object MessageUiMapper {
         currentUserId: String,
         partnerName: String,
         isTopInGroup: Boolean = false,
-        showTail: Boolean = true
+        showTail: Boolean = true,
+        replyMessage: ChatMessage? = null // 🚀 FIX: রিপ্লাই করা মেসেজটি রিসিভ করার জন্য প্যারামিটার
     ): MessageUiModel {
         val isMe = entity.senderId == currentUserId
-        val type = MessageType.from(entity.type)
+        val type = MessageType.from(entity.type ?: "text")
 
         return MessageUiModel(
             id = entity.id,
@@ -42,7 +46,8 @@ object MessageUiMapper {
             media = mapMediaState(entity),
             audio = mapAudioState(entity),
             call = mapCallState(entity, isMe),
-            reply = mapReplyState(entity),
+            // 🚀 FIX: এখানে অরিজিনাল মেসেজ ডেটা পাস করা হলো
+            reply = mapReplyState(entity, replyMessage, partnerName, currentUserId),
             reactions = mapReactions(entity, currentUserId)
         )
     }
@@ -79,34 +84,27 @@ object MessageUiMapper {
             url = attachment.fileUrl,
             fileName = attachment.fileName,
             rawSizeBytes = attachment.fileSize,
-            formattedSize = FileFormatter.formatSize(attachment.fileSize ?: 0L) // Fix: Added ?: 0L
+            formattedSize = FileFormatter.formatSize(attachment.fileSize ?: 0L)
         )
     }
 
     private fun mapAudioState(entity: ChatMessage): AudioUiState? {
         if (entity.type != "audio") return null
-        val meta = entity.metadata as? Map<*, *>
-        val duration = meta?.get("duration")?.toString()?.toIntOrNull() ?: 0
+        // 🚀 FIX: JsonObject থেকে ডেটা রিড করার জন্য kotlinx.serialization এর ফাংশন
+        val duration = entity.metadata?.get("duration")?.jsonPrimitive?.intOrNull ?: 0
         val url = entity.attachments?.firstOrNull()?.fileUrl ?: return null
         return AudioUiState(url = url, durationSeconds = duration)
     }
 
     private fun mapCallState(entity: ChatMessage, isMe: Boolean): CallUiState? {
-        val meta = entity.metadata as? Map<*, *>
-
-        // ১. চেক করুন এটি আসলেই কল কিনা
-        val hasCallMeta = meta?.containsKey("call_type") == true
+        val hasCallMeta = entity.metadata?.containsKey("call_type") == true
         val content = entity.content ?: ""
         val isLegacyCall = content.startsWith("📞") || content.contains("Voice call", ignoreCase = true) || content.contains("Video call", ignoreCase = true)
 
-        // যদি কল না হয়, তাহলে null রিটার্ন করুন
-        if (!hasCallMeta && !isLegacyCall) {
-            return null
-        }
+        if (!hasCallMeta && !isLegacyCall) return null
 
-        // ২. যদি কল হয়, তাহলে ডেটা ম্যাপ করুন
-        val callTypeStr = (meta?.get("call_type") as? String) ?: if (content.contains("Video", ignoreCase = true)) "video" else "audio"
-        val callStatusStr = (meta?.get("call_status") as? String) ?: when {
+        val callTypeStr = entity.metadata?.get("call_type")?.jsonPrimitive?.contentOrNull ?: if (content.contains("Video", ignoreCase = true)) "video" else "audio"
+        val callStatusStr = entity.metadata?.get("call_status")?.jsonPrimitive?.contentOrNull ?: when {
             content.contains("Missed", ignoreCase = true) -> "missed"
             content.contains("Incoming", ignoreCase = true) -> "ringing"
             else -> "ended"
@@ -130,16 +128,42 @@ object MessageUiMapper {
         return CallUiState(
             type = type,
             status = status,
-            durationSeconds = (meta?.get("duration") as? String)?.toIntOrNull(),
+            durationSeconds = entity.metadata?.get("duration")?.jsonPrimitive?.intOrNull,
             isMissedOrFailed = isMissedOrFailed,
             isIncomingRinging = isIncomingRinging,
             statusTextRes = statusTextRes
         )
     }
 
-    private fun mapReplyState(entity: ChatMessage): ReplyPreviewUiState? {
+    private fun mapReplyState(entity: ChatMessage, replyMessage: ChatMessage?, partnerName: String, currentUserId: String): ReplyPreviewUiState? {
         val replyId = entity.replyToId ?: return null
-        return ReplyPreviewUiState(messageId = replyId, senderName = "User", previewText = "Attachment")
+        
+        // 🚀 FIX: যদি অরিজিনাল মেসেজটি খুঁজে পাওয়া যায়, তবে তার কন্টেন্ট এক্সট্রাক্ট করা হচ্ছে
+        if (replyMessage != null) {
+            val isReplyMe = replyMessage.senderId == currentUserId
+            val senderName = if (isReplyMe) "You" else partnerName
+            
+            val previewText = when (replyMessage.type) {
+                "image" -> "📷 Photo"
+                "video" -> "📹 Video"
+                "audio" -> "🎵 Voice Message"
+                "document" -> "📄 Document"
+                else -> replyMessage.content ?: "Message"
+            }
+
+            return ReplyPreviewUiState(
+                messageId = replyId,
+                senderName = senderName,
+                previewText = previewText
+            )
+        }
+
+        // যদি মেসেজটি অনেক পুরানো হয় এবং লোকাল লিস্টে না থাকে (Fallback)
+        return ReplyPreviewUiState(
+            messageId = replyId,
+            senderName = "User",
+            previewText = "Message"
+        )
     }
 
     private fun mapReactions(entity: ChatMessage, currentUserId: String): List<ReactionUiState> {

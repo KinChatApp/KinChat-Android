@@ -8,6 +8,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -78,7 +79,6 @@ fun ChatScreen(
     val partnerState by viewModel.partnerState.collectAsState()
 
     val listState = rememberLazyListState()
-    val scope = rememberCoroutineScope()
 
     var selectedMessageId by remember { mutableStateOf<String?>(null) }
     var replyingTo by remember { mutableStateOf<ChatMessage?>(null) }
@@ -94,7 +94,6 @@ fun ChatScreen(
         is PartnerUiState.Error -> "Unknown User"
     }
 
-    // 🚀 FIX: Partner ID বের করে নেওয়া হলো
     val partnerId = (partnerState as? PartnerUiState.Success)?.id ?: ""
 
     val chatItems = remember(messages, viewModel.currentUserId, displayName) {
@@ -118,15 +117,14 @@ fun ChatScreen(
                 currentUserId = viewModel.currentUserId,
                 partnerName = displayName,
                 isTopInGroup = !prevSameGroup,
-                showTail = !nextSameGroup
+                showTail = !nextSameGroup,
+                replyMessage = msg.replyToId?.let { replyId -> messages.find { it.id == replyId } }
             )
 
             result.add(ChatListItem.Msg(uiModel))
         }
         result.reversed()
     }
-
-    val showScrollToBottom by remember { derivedStateOf { listState.firstVisibleItemIndex > 3 } }
 
     Scaffold(
         topBar = {
@@ -138,12 +136,9 @@ fun ChatScreen(
                         isPartnerTyping = isPartnerTyping,
                         isPartnerOnline = isPartnerOnline,
                         onBack = onBack,
-                        onGoToInfo = { 
-                            // 🚀 FIX: chatId এর পরিবর্তে partnerId পাস করা হলো
-                            if (partnerId.isNotEmpty()) {
-                                onNavigateToInfo(partnerId) 
-                            }
-                        } 
+                        onGoToInfo = {
+                            if (partnerId.isNotEmpty()) onNavigateToInfo(partnerId)
+                        }
                     )
                 },
                 actions = {
@@ -159,12 +154,9 @@ fun ChatScreen(
                             isMuted = false,
                             isBlocked = false,
                             onMenuToggle = { isMenuExpanded = it },
-                            onGoToInfo = { 
-                                // 🚀 FIX: chatId এর পরিবর্তে partnerId পাস করা হলো
-                                if (partnerId.isNotEmpty()) {
-                                    onNavigateToInfo(partnerId) 
-                                }
-                            }, 
+                            onGoToInfo = {
+                                if (partnerId.isNotEmpty()) onNavigateToInfo(partnerId)
+                            },
                             onAction = { }
                         )
                     }
@@ -178,8 +170,12 @@ fun ChatScreen(
         bottomBar = {
             ChatInput(
                 onSendMessage = { text ->
-                    viewModel.sendMessage(text, replyingTo?.id)
-                    replyingTo = null
+                    // ✅ Boolean চেক করে তারপর reply স্টেট ক্লিয়ার করা হচ্ছে
+                    val success = viewModel.sendMessage(text, replyingTo?.id)
+                    if (success) {
+                        replyingTo = null
+                    }
+                    success
                 },
                 updateTypingStatus = { },
                 partnerName = displayName,
@@ -196,69 +192,102 @@ fun ChatScreen(
                 .padding(paddingValues)
                 .background(Brush.verticalGradient(colors = listOf(MaterialTheme.colorScheme.surface, MaterialTheme.colorScheme.background)))
         ) {
-            LazyColumn(
-                state = listState,
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(top = 12.dp, bottom = 12.dp),
-                reverseLayout = true
-            ) {
-                items(
-                    items = chatItems,
-                    key = { item ->
-                        when (item) {
-                            is ChatListItem.Msg -> item.uiModel.id
-                            is ChatListItem.Header -> "header_${item.date}"
+            ChatListContent(
+                chatItems = chatItems,
+                messagesCount = messages.size,
+                listState = listState,
+                selectedMessageId = selectedMessageId,
+                onMessageSelect = { id ->
+                    selectedMessageId = if (selectedMessageId == id) null else id
+                },
+                onMessageAction = { action ->
+                    when (action) {
+                        is MessageAction.Reply -> {
+                            replyingTo = messages.find { it.id == action.message.id }
                         }
-                    },
-                    contentType = { item ->
-                        when (item) {
-                            is ChatListItem.Msg -> "message_bubble"
-                            is ChatListItem.Header -> "date_header"
-                        }
+                        is MessageAction.DeleteForMe -> viewModel.deleteMessage(action.message.id, "for_me")
+                        is MessageAction.DeleteForEveryone -> viewModel.deleteMessage(action.message.id, "for_everyone")
+                        is MessageAction.PlayAudio -> { /* TODO */ }
+                        is MessageAction.PauseAudio -> { /* TODO */ }
+                        is MessageAction.JoinCall -> { /* TODO */ }
+                        is MessageAction.DownloadMedia -> { /* TODO */ }
+                        is MessageAction.OpenMedia -> { /* TODO */ }
                     }
-                ) { item ->
-                    when (item) {
-                        is ChatListItem.Header -> DateSeparator(item.label)
-                        is ChatListItem.Msg -> {
-                            MessageBubble(
-                                message = item.uiModel,
-                                isSelected = selectedMessageId == item.uiModel.id,
-                                onSelect = { selectedMessageId = if (selectedMessageId == item.uiModel.id) null else item.uiModel.id },
-                                onAction = { action ->
-                                    when (action) {
-                                        is MessageAction.Reply -> {
-                                            replyingTo = messages.find { it.id == action.message.id }
-                                        }
-                                        is MessageAction.DeleteForMe -> viewModel.deleteMessage(action.message.id, "for_me")
-                                        is MessageAction.DeleteForEveryone -> viewModel.deleteMessage(action.message.id, "for_everyone")
-                                        is MessageAction.PlayAudio -> { /* TODO: Play audio logic */ }
-                                        is MessageAction.PauseAudio -> { /* TODO: Pause audio logic */ }
-                                        is MessageAction.JoinCall -> { /* TODO: Join Call logic */ }
-                                        is MessageAction.DownloadMedia -> { /* TODO: Download via ViewModel/UseCase */ }
-                                        is MessageAction.OpenMedia -> { /* TODO: Open media viewer */ }
-                                    }
-                                    selectedMessageId = null
-                                }
-                            )
-                        }
-                    }
+                    selectedMessageId = null
                 }
-            }
+            )
+        }
+    }
+}
 
-            AnimatedVisibility(
-                visible = showScrollToBottom,
-                modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
-                enter = fadeIn() + scaleIn(),
-                exit = fadeOut() + scaleOut()
-            ) {
-                SmallFloatingActionButton(
-                    onClick = { scope.launch { listState.animateScrollToItem(0) } },
-                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                ) {
-                    Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Scroll to latest")
+@Composable
+private fun ChatListContent(
+    chatItems: List<ChatListItem>,
+    messagesCount: Int,
+    listState: LazyListState,
+    selectedMessageId: String?,
+    onMessageSelect: (String) -> Unit,
+    onMessageAction: (MessageAction) -> Unit
+) {
+    val scope = rememberCoroutineScope()
+    val showScrollToBottom by remember { derivedStateOf { listState.firstVisibleItemIndex > 3 } }
+
+    LaunchedEffect(messagesCount) {
+        if (messagesCount > 0) {
+            listState.animateScrollToItem(0)
+        }
+    }
+
+    LazyColumn(
+        state = listState,
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(top = 12.dp, bottom = 12.dp),
+        reverseLayout = true
+    ) {
+        items(
+            items = chatItems,
+            key = { item ->
+                when (item) {
+                    is ChatListItem.Msg -> item.uiModel.id
+                    is ChatListItem.Header -> "header_${item.date}"
+                }
+            },
+            contentType = { item ->
+                when (item) {
+                    is ChatListItem.Msg -> "message_bubble"
+                    is ChatListItem.Header -> "date_header"
                 }
             }
+        ) { item ->
+            when (item) {
+                is ChatListItem.Header -> DateSeparator(item.label)
+                is ChatListItem.Msg -> {
+                    MessageBubble(
+                        message = item.uiModel,
+                        isSelected = selectedMessageId == item.uiModel.id,
+                        onSelect = { onMessageSelect(item.uiModel.id) },
+                        onAction = onMessageAction
+                    )
+                }
+            }
+        }
+    }
+
+    AnimatedVisibility(
+        visible = showScrollToBottom,
+        modifier = Modifier
+            .fillMaxSize()
+            .wrapContentSize(Alignment.BottomEnd)
+            .padding(16.dp),
+        enter = fadeIn() + scaleIn(),
+        exit = fadeOut() + scaleOut()
+    ) {
+        SmallFloatingActionButton(
+            onClick = { scope.launch { listState.animateScrollToItem(0) } },
+            containerColor = MaterialTheme.colorScheme.primaryContainer,
+            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+        ) {
+            Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Scroll to latest")
         }
     }
 }

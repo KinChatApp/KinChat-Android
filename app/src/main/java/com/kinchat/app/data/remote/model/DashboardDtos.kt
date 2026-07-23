@@ -19,11 +19,14 @@ data class ChatDto(
     @SerialName("avatar_url") val avatarUrl: String? = null
 )
 
-@kotlinx.serialization.Serializable
+@Serializable
 data class ChatPreviewDto(
     val chat_id: String,
     val is_blocked: Boolean? = false,
     val is_muted: Boolean? = false,
+    val is_pinned: Boolean? = false,
+    val is_favorite: Boolean? = false,
+    val is_archived: Boolean? = false,
     val last_message_content: String? = null,
     val last_message_sender: String? = null,
     val last_message_time: String? = null,

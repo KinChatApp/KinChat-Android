@@ -75,7 +75,12 @@ class DashboardRepositoryImpl @Inject constructor(
                         lastMessage = dto.last_message_content,
                         timestamp = parseTimestamp(dto.last_message_time),
                         unreadCount = dto.unread_count ?: 0,
-                        avatarUrl = dto.other_user_avatar
+                        avatarUrl = dto.other_user_avatar,
+                        isPinned = dto.is_pinned ?: false,
+                        isFavorite = dto.is_favorite ?: false,
+                        isArchived = dto.is_archived ?: false,
+                        isMuted = dto.is_muted ?: false,
+                        isBlocked = dto.is_blocked ?: false
                     )
                 }.sortedByDescending { it.timestamp }
 
@@ -126,6 +131,66 @@ class DashboardRepositoryImpl @Inject constructor(
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
+        }
+    }
+
+    override suspend fun updateChatPinStatus(chatId: String, isPinned: Boolean): Result<Unit> = runCatching {
+        val currentUserId = getCurrentUserId() ?: throw Exception("User not logged in")
+        supabase.postgrest["chat_participants"].update({
+            set("is_pinned", isPinned)
+        }) {
+            filter {
+                eq("chat_id", chatId)
+                eq("user_id", currentUserId)
+            }
+        }
+    }
+
+    override suspend fun updateChatFavoriteStatus(chatId: String, isFavorite: Boolean): Result<Unit> = runCatching {
+        val currentUserId = getCurrentUserId() ?: throw Exception("User not logged in")
+        supabase.postgrest["chat_participants"].update({
+            set("is_favorite", isFavorite)
+        }) {
+            filter {
+                eq("chat_id", chatId)
+                eq("user_id", currentUserId)
+            }
+        }
+    }
+
+    override suspend fun updateChatArchiveStatus(chatId: String, isArchived: Boolean): Result<Unit> = runCatching {
+        val currentUserId = getCurrentUserId() ?: throw Exception("User not logged in")
+        supabase.postgrest["chat_participants"].update({
+            set("is_archived", isArchived)
+        }) {
+            filter {
+                eq("chat_id", chatId)
+                eq("user_id", currentUserId)
+            }
+        }
+    }
+
+    override suspend fun updateChatMuteStatus(chatId: String, isMuted: Boolean): Result<Unit> = runCatching {
+        val currentUserId = getCurrentUserId() ?: throw Exception("User not logged in")
+        supabase.postgrest["chat_participants"].update({
+            set("is_muted", isMuted)
+        }) {
+            filter {
+                eq("chat_id", chatId)
+                eq("user_id", currentUserId)
+            }
+        }
+    }
+
+    override suspend fun updateChatBlockStatus(chatId: String, isBlocked: Boolean): Result<Unit> = runCatching {
+        val currentUserId = getCurrentUserId() ?: throw Exception("User not logged in")
+        supabase.postgrest["chat_participants"].update({
+            set("is_blocked", isBlocked)
+        }) {
+            filter {
+                eq("chat_id", chatId)
+                eq("user_id", currentUserId)
+            }
         }
     }
 

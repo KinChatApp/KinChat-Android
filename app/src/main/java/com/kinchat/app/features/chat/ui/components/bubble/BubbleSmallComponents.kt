@@ -52,7 +52,8 @@ fun ReplyPreview(reply: ReplyPreviewUiState?) {
     ) {
         Column {
             Text(text = reply.senderName, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-            Text(text = reply.previewText, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f), maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 13.sp)
+            // 🚀 FIX: maxLines 1 থেকে বাড়িয়ে 3 করা হয়েছে যেন বড় মেসেজ ৩ লাইন পর্যন্ত দেখা যায়।
+            Text(text = reply.previewText, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f), maxLines = 3, overflow = TextOverflow.Ellipsis, fontSize = 13.sp)
         }
     }
 }

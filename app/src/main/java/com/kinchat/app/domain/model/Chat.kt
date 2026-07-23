@@ -6,7 +6,12 @@ data class Chat(
     val lastMessage: String?,
     val timestamp: Long,
     val unreadCount: Int,
-    val avatarUrl: String?
+    val avatarUrl: String?,
+    val isPinned: Boolean = false,
+    val isFavorite: Boolean = false,
+    val isArchived: Boolean = false,
+    val isMuted: Boolean = false,
+    val isBlocked: Boolean = false
 )
 
 data class UserProfile(
