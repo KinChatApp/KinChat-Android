@@ -9,19 +9,32 @@ import com.kinchat.app.features.chat.ui.components.bubble.*
 fun MessageBubble(
     message: MessageUiModel,
     isSelected: Boolean,
-    onSelect: (MessageUiModel?) -> Unit,
+    isSelectionModeEnabled: Boolean = false,
+    onSelect: () -> Unit,
     onAction: (MessageAction) -> Unit
 ) {
     if (message.call != null) {
-        CallBubble(message = message, isSelected = isSelected, onSelect = onSelect, onJoinCall = { onAction(MessageAction.JoinCall(message)) })
+        CallBubble(
+            message = message, 
+            isSelected = isSelected, 
+            onSelect = { onSelect() }, 
+            onJoinCall = { onAction(MessageAction.JoinCall(message)) }
+        )
     } else {
         MessageBubbleContainer(
             message = message,
             isSelected = isSelected,
+            isSelectionModeEnabled = isSelectionModeEnabled,
             onSelect = onSelect,
-            onSwipeReply = { if (!message.status.isDeleted) onAction(MessageAction.Reply(message)) }
+            onSwipeReply = { if (!message.status.isDeleted) onAction(MessageAction.Reply(message)) },
+            onReact = { reaction -> onAction(MessageAction.React(message.id, reaction)) }
         ) {
-            BubbleContents(message = message, onAction = onAction)
+            BubbleContents(
+                message = message, 
+                isSelectionModeEnabled = isSelectionModeEnabled,
+                onAction = onAction,
+                onSelect = onSelect // 🚀 অন-সিলেক্ট পাস করা হলো যেন টেক্সট থেকে ইভেন্ট পাঠানো যায়
+            )
         }
     }
 }

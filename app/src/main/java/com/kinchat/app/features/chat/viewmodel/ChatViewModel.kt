@@ -5,37 +5,19 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.kinchat.app.domain.model.ChatMessage
 import com.kinchat.app.domain.repository.ChatRepository
-import io.github.jan.supabase.SupabaseClient
-import io.github.jan.supabase.gotrue.auth
-import io.github.jan.supabase.postgrest.postgrest
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
-import kotlinx.serialization.Serializable
-import java.util.UUID
 import javax.inject.Inject
-
-@Serializable
-private data class ParticipantDto(val chat_id: String? = null, val user_id: String)
-
-@Serializable
-private data class ChatDto(val id: String)
-
-sealed interface PartnerUiState {
-    data object Loading : PartnerUiState
-    data class Success(val id: String, val name: String) : PartnerUiState
-    data object Error : PartnerUiState
-}
 
 @HiltViewModel
 class ChatViewModel @Inject constructor(
     private val chatRepository: ChatRepository,
-    private val supabaseClient: SupabaseClient
+    private val chatSetupUseCase: ChatSetupUseCase
 ) : ViewModel() {
 
     private val _messages = MutableStateFlow<List<ChatMessage>>(emptyList())
@@ -45,148 +27,104 @@ class ChatViewModel @Inject constructor(
     val partnerState: StateFlow<PartnerUiState> = _partnerState.asStateFlow()
 
     private val _isPartnerTyping = MutableStateFlow(false)
-    val isPartnerTyping = _isPartnerTyping.asStateFlow()                                             
-    
+    val isPartnerTyping = _isPartnerTyping.asStateFlow()
+
     private val _isPartnerOnline = MutableStateFlow(false)
     val isPartnerOnline = _isPartnerOnline.asStateFlow()
 
+    private val _selectedMessages = MutableStateFlow<Set<String>>(emptySet())
+    val selectedMessages = _selectedMessages.asStateFlow()
+
     private var currentChatId: String? = null
-    private var chatObservingJob: Job? = null
     var currentUserId: String = ""
         private set
+        
+    private var chatObservingJob: Job? = null
 
-    private val AI_BOT_ID = "de438bb4-d954-4c31-9ad1-9dd34b85d981"
+    fun toggleSelection(messageId: String) {
+        _selectedMessages.value = _selectedMessages.value.toMutableSet().apply {
+            if (contains(messageId)) remove(messageId) else add(messageId)
+        }
+    }
+
+    fun clearSelection() {
+        _selectedMessages.value = emptySet()
+    }
 
     fun initializeChat(passedId: String) {
         chatObservingJob?.cancel()
 
         chatObservingJob = viewModelScope.launch {
-            _partnerState.value = PartnerUiState.Loading
+            val quickName = chatRepository.getPartnerName(passedId, "")
+            if (!quickName.isNullOrBlank()) {
+                _partnerState.value = PartnerUiState.Success(id = passedId, name = quickName)
+            } else {
+                _partnerState.value = PartnerUiState.Loading
+            }
             _messages.value = emptyList()
 
-            var user = supabaseClient.auth.currentUserOrNull()
-            if (user == null) {
-                delay(500)
-                user = supabaseClient.auth.currentUserOrNull()
-            }
+            // 🚀 চ্যাট সেটআপের জটিল লজিক UseCase এর মাধ্যমে হ্যান্ডেল করা হচ্ছে
+            val setupResult = chatSetupUseCase.execute(passedId, quickName)
 
-            currentUserId = user?.id ?: ""
+            if (setupResult != null) {
+                currentUserId = setupResult.currentUserId
+                currentChatId = setupResult.actualChatId
 
-            if (currentUserId.isNotEmpty() && passedId.isNotEmpty()) {
-                var actualChatId = passedId
-                var partnerName = chatRepository.getPartnerName(actualChatId, currentUserId)
-                var partnerId = ""
-
-                if (passedId == AI_BOT_ID || partnerName == null) {
-                    try {
-                        Log.d("ChatDebug", "Initializing Chat Room setup...")
-
-                        if (passedId == AI_BOT_ID) {
-                            partnerId = AI_BOT_ID
-                            partnerName = "TukTak AI"
-                        }
-
-                        val myChats = supabaseClient.postgrest["chat_participants"]
-                            .select { filter { eq("user_id", currentUserId) } }
-                            .decodeList<ParticipantDto>().mapNotNull { it.chat_id }
-
-                        val partnerChats = supabaseClient.postgrest["chat_participants"]
-                            .select { filter { eq("user_id", partnerId) } }
-                            .decodeList<ParticipantDto>().mapNotNull { it.chat_id }
-
-                        val sharedChatId = myChats.intersect(partnerChats.toSet()).firstOrNull()
-
-                        if (sharedChatId != null) {
-                            actualChatId = sharedChatId
-                            Log.d("ChatDebug", "Found existing chat room: $actualChatId")
-                        } else {
-                            Log.d("ChatDebug", "No chat room found. Creating a new one...")
-                            val newChatId = UUID.randomUUID().toString()
-
-                            supabaseClient.postgrest["chats"].insert(ChatDto(id = newChatId))
-                            supabaseClient.postgrest["chat_participants"].insert(listOf(
-                                ParticipantDto(chat_id = newChatId, user_id = currentUserId),
-                                ParticipantDto(chat_id = newChatId, user_id = partnerId)
-                            ))
-
-                            actualChatId = newChatId
-                            Log.d("ChatDebug", "Successfully created new chat room: $actualChatId")
-                        }
-                    } catch (e: Exception) {
-                        Log.e("ChatDebug", "Error in Chat Setup: ${e.message}", e)
-                        if (passedId == AI_BOT_ID) {
-                            partnerName = "TukTak AI"
-                        }
-                    }
-                } else {
-                    try {
-                        val participant = supabaseClient.postgrest["chat_participants"]
-                            .select {
-                                filter {
-                                    eq("chat_id", actualChatId)
-                                    neq("user_id", currentUserId)
-                                }
-                            }.decodeList<ParticipantDto>().firstOrNull()
-
-                        partnerId = participant?.user_id ?: ""
-                    } catch (e: Exception) {
-                        Log.e("ChatDebug", "Error fetching partner ID", e)
-                    }
-                }
-
-                currentChatId = actualChatId
-
-                if (partnerName != null) {
+                if (setupResult.partnerName != null) {
                     _partnerState.value = PartnerUiState.Success(
-                        id = partnerId.ifEmpty { actualChatId },
-                        name = partnerName ?: "TukTak AI"
+                        id = setupResult.partnerId.ifEmpty { setupResult.actualChatId },
+                        name = setupResult.partnerName
                     )
                 } else {
                     _partnerState.value = PartnerUiState.Error
                 }
 
                 try {
-                    // 🚀 এই অংশটি এখন সরাসরি Room Database (Local Cache) থেকে ফ্লো রিড করবে
-                    chatRepository.observeMessages(actualChatId).collectLatest { msgs ->
+                    chatRepository.observeMessages(setupResult.actualChatId).collectLatest { msgs ->
                         _messages.value = msgs.distinctBy { it.id }.filter { msg ->
                             msg.deletedForUsers?.contains(currentUserId) != true
                         }
                         if (currentUserId.isNotEmpty()) {
-                            chatRepository.updateLastRead(actualChatId, currentUserId)
+                            chatRepository.updateLastRead(setupResult.actualChatId, currentUserId)
                         }
                     }
                 } catch (e: Exception) {
-                    Log.e("ChatDebug", "Error fetching messages", e)
+                    Log.e("ChatDebug", "Error observing messages: ${e.message}")
                 }
-
-            } else {
+            } else if (quickName.isNullOrBlank()) {
                 _partnerState.value = PartnerUiState.Error
             }
         }
     }
 
-    fun sendMessage(content: String, replyToId: String? = null): Boolean {
-        Log.d("ChatDebug", "Send button clicked! Message: $content")
-
+    suspend fun sendMessage(content: String, replyToId: String? = null): SendMessageResult {
         val chatId = currentChatId
-        if (chatId == null) {
-            Log.e("ChatDebug", "Error: currentChatId is null! Chat setup is incomplete.")
-            return false 
-        }
+            ?: return SendMessageResult.Failure("চ্যাট এখনো লোড হয়নি, একটু অপেক্ষা করে আবার চেষ্টা করুন")
 
         if (currentUserId.isEmpty()) {
-            Log.e("ChatDebug", "Error: currentUserId is empty!")
-            return false
+            return SendMessageResult.Failure("ইউজার লগইন স্ট্যাটাস পাওয়া যায়নি, একটু অপেক্ষা করে আবার চেষ্টা করুন")
         }
 
-        viewModelScope.launch {
-            val result = chatRepository.sendMessage(chatId, currentUserId, content, replyToId)
-            if (result.isFailure) {
-                val error = result.exceptionOrNull()
-                Log.e("ChatDebug", "Message send failed: ${error?.message}", error)
+        val result = chatRepository.sendMessage(chatId, currentUserId, content, replyToId)
+
+        return if (result.isSuccess) {
+            SendMessageResult.Success
+        } else {
+            val rawMessage = result.exceptionOrNull()?.message ?: "অজানা সমস্যা"
+            val cleanMessage = rawMessage.substringBefore("URL:").trim().ifBlank {
+                rawMessage.take(300)
             }
+            Log.e("ChatDebug", "sendMessage failed: $rawMessage", result.exceptionOrNull())
+            SendMessageResult.Failure(cleanMessage)
         }
-        return true 
+    }
+
+    fun editMessage(messageId: String, newContent: String) {
+        if (currentUserId.isEmpty()) return
+        viewModelScope.launch {
+            try { chatRepository.editMessage(messageId, newContent) }
+            catch (e: Exception) { Log.e("ChatDebug", "Error editing: ${e.message}") }
+        }
     }
 
     fun toggleSaveMessage(messageId: String) {
@@ -194,9 +132,14 @@ class ChatViewModel @Inject constructor(
         viewModelScope.launch { chatRepository.toggleSaveMessage(messageId, currentUserId) }
     }
 
-    fun deleteMessage(messageId: String, type: String = "for_me") {
-        if (currentUserId.isEmpty()) return
-        viewModelScope.launch { chatRepository.deleteMessage(messageId, currentUserId, type) }
+    fun deleteSelectedMessages(type: String = "for_me") {
+        if (currentUserId.isEmpty() || _selectedMessages.value.isEmpty()) return
+        viewModelScope.launch {
+            _selectedMessages.value.forEach { msgId ->
+                chatRepository.deleteMessage(msgId, currentUserId, type)
+            }
+            clearSelection()
+        }
     }
 
     fun addReaction(messageId: String, reactionType: String) {

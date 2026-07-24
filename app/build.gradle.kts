@@ -6,6 +6,11 @@ plugins {
     id("org.jetbrains.kotlin.plugin.serialization")
 }
 
+// 🚀 Room Schema Export Config
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
+}
+
 android {
     namespace = "com.kinchat.app"
     compileSdk = 34
@@ -23,8 +28,7 @@ android {
         }
 
         buildConfigField("String", "SUPABASE_URL", "\"https://iwafvjvelsfrdfbjcmsg.supabase.co\"")
-        buildConfigField("String", "SUPABASE_ANON_KEY", "\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml3YWZ2anZlbHNmcmRmYmpjbXNnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEyNzM0ODgsImV4cCI6MjA5Njg0OTQ4OH0.13nCDbbBSjItdXjc4qZeIFCtrvXaoO1q2Xxlq3bN6rw\"")
-
+        buildConfigField("String", "SUPABASE_ANON_KEY", "\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml3YWZ2anZlbHNmcmRmYmpjbXNnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEyNzM0ODgsImV4cCI6MjA5Njg0OTQ4OH0.13nCDbbBSjItdXjc4qZeIFCtrvXaoO1q2Xxlq3bN6rw\"")                                
         buildConfigField("String", "UPSTASH_REDIS_REST_URL", "\"https://your-redis-url.upstash.io\"")
         buildConfigField("String", "UPSTASH_REDIS_REST_TOKEN", "\"your-redis-token\"")
     }
@@ -79,6 +83,11 @@ dependencies {
     implementation("com.google.dagger:hilt-android:2.51.1")
     ksp("com.google.dagger:hilt-android-compiler:2.51.1")
     implementation("androidx.hilt:hilt-navigation-compose:1.2.0")
+
+    // 🚀 WorkManager & Hilt Work for Background Queue
+    implementation("androidx.work:work-runtime-ktx:2.9.0")
+    implementation("androidx.hilt:hilt-work:1.2.0")
+    ksp("androidx.hilt:hilt-compiler:1.2.0")
 
     // Room Database (Offline First Caching)
     val roomVersion = "2.6.1"

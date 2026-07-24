@@ -20,6 +20,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material3.*
@@ -35,17 +36,27 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.kinchat.app.domain.model.ChatMessage
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 @Composable
 fun ChatInput(
-    onSendMessage: (String) -> Boolean, // ✅ এটি এখন Boolean আশা করে
+    onSendMessage: suspend (String) -> Boolean, // 🚀 ফিক্স: suspend যোগ করা হয়েছে
     updateTypingStatus: (Boolean) -> Unit,
     partnerName: String,
     replyingToMessage: ChatMessage? = null,
+    editingMessage: ChatMessage? = null,
     replyingToIsMe: Boolean = false,
     onCancelReply: () -> Unit = {}
 ) {
+    val coroutineScope = rememberCoroutineScope() // 🚀 ফিক্স: স্কোপ তৈরি করা হয়েছে
     var text by remember { mutableStateOf("") }
+
+    // 🚀 এডিট মোড অন হলে ইনপুট বক্সে আগের টেক্সট বসিয়ে দেওয়া হবে
+    LaunchedEffect(editingMessage) {
+        if (editingMessage != null) {
+            text = editingMessage.content ?: ""
+        }
+    }
 
     LaunchedEffect(text) {
         if (text.isNotEmpty()) {
@@ -60,38 +71,43 @@ fun ChatInput(
     Surface(color = MaterialTheme.colorScheme.surface, tonalElevation = 2.dp) {
         Column {
             AnimatedVisibility(
-                visible = replyingToMessage != null,
+                visible = replyingToMessage != null || editingMessage != null,
                 enter = expandVertically() + fadeIn(),
                 exit = shrinkVertically() + fadeOut()
             ) {
-                if (replyingToMessage != null) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 12.dp, vertical = 6.dp)
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(MaterialTheme.colorScheme.surfaceVariant)
-                            .padding(horizontal = 10.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = if (replyingToIsMe) "Replying to yourself" else "Replying to $partnerName",
-                                color = MaterialTheme.colorScheme.primary,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 12.sp
-                            )
-                            Text(
-                                text = replyingToMessage.content ?: "[Media]",
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                fontSize = 12.sp,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
-                        IconButton(onClick = onCancelReply, modifier = Modifier.size(28.dp)) {
-                            Icon(Icons.Default.Close, contentDescription = "Cancel reply", tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                        .padding(horizontal = 10.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (editingMessage != null) {
+                        Icon(Icons.Default.Edit, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = if (editingMessage != null) "Edit Message" else if (replyingToIsMe) "Replying to yourself" else "Replying to $partnerName",
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp
+                        )
+                        Text(
+                            text = editingMessage?.content ?: replyingToMessage?.content ?: "[Media]",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 12.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    IconButton(onClick = {
+                        onCancelReply()
+                        if (editingMessage != null) text = ""
+                    }, modifier = Modifier.size(28.dp)) {
+                        Icon(Icons.Default.Close, contentDescription = "Cancel", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
@@ -108,27 +124,20 @@ fun ChatInput(
                         .padding(horizontal = 6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    IconButton(onClick = { /* TODO: open attachment sheet */ }) {
-                        Icon(Icons.Default.AttachFile, contentDescription = "Attach", tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
+                    IconButton(onClick = { }) { Icon(Icons.Default.AttachFile, contentDescription = "Attach", tint = MaterialTheme.colorScheme.onSurfaceVariant) }
                     TextField(
                         value = text,
                         onValueChange = { text = it },
                         modifier = Modifier.weight(1f),
                         placeholder = { Text("Message $partnerName") },
                         colors = TextFieldDefaults.colors(
-                            focusedContainerColor = Color.Transparent,
-                            unfocusedContainerColor = Color.Transparent,
-                            disabledContainerColor = Color.Transparent,
-                            focusedIndicatorColor = Color.Transparent,
-                            unfocusedIndicatorColor = Color.Transparent
+                            focusedContainerColor = Color.Transparent, unfocusedContainerColor = Color.Transparent,
+                            disabledContainerColor = Color.Transparent, focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent
                         ),
                         maxLines = 5,
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Default)
                     )
-                    IconButton(onClick = { /* TODO: open camera */ }) {
-                        Icon(Icons.Default.CameraAlt, contentDescription = "Camera", tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
+                    IconButton(onClick = { }) { Icon(Icons.Default.CameraAlt, contentDescription = "Camera", tint = MaterialTheme.colorScheme.onSurfaceVariant) }
                 }
 
                 Spacer(modifier = Modifier.width(6.dp))
@@ -141,10 +150,13 @@ fun ChatInput(
                         .background(MaterialTheme.colorScheme.primary)
                         .clickable {
                             if (isTextPresent) {
-                                // ✅ মেসেজটি সাকসেসফুলি এক্সেপ্ট হলে তবেই ক্লিয়ার হবে
-                                val success = onSendMessage(text.trim())
-                                if (success) {
-                                    text = ""
+                                // 🚀 ফিক্স: coroutineScope-এর ভেতর কল করা হয়েছে
+                                coroutineScope.launch {
+                                    val success = onSendMessage(text.trim())
+                                    if (success) {
+                                        text = ""
+                                        onCancelReply() // মেসেজ সেন্ড হলে রিপ্লাই/এডিট মোড ক্লিয়ার হবে
+                                    }
                                 }
                             }
                         },
@@ -152,10 +164,7 @@ fun ChatInput(
                 ) {
                     AnimatedContent(
                         targetState = isTextPresent,
-                        transitionSpec = {
-                            (fadeIn(tween(150)) + scaleIn(initialScale = 0.7f)) togetherWith
-                                (fadeOut(tween(100)) + scaleOut(targetScale = 0.7f))
-                        },
+                        transitionSpec = { (fadeIn(tween(150)) + scaleIn(initialScale = 0.7f)) togetherWith (fadeOut(tween(100)) + scaleOut(targetScale = 0.7f)) },
                         label = "sendMicSwap"
                     ) { hasText ->
                         Icon(

@@ -3,10 +3,10 @@ package com.kinchat.app.features.chat.ui.components.bubble
 import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.ClickableText
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -14,11 +14,16 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
@@ -37,21 +42,29 @@ import kotlinx.coroutines.withContext
 import org.jsoup.Jsoup
 import java.util.concurrent.ConcurrentHashMap
 
-// 🚀 ഗ্লোবাল ক্যাশ মেমরি তৈরি করা হলো (In-Memory Caching)
 object LinkPreviewCacheManager {
     val cache = ConcurrentHashMap<String, LinkPreviewData>()
 }
 
 @Composable
-fun BubbleContents(message: MessageUiModel, onAction: (MessageAction) -> Unit) {
+fun BubbleContents(
+    message: MessageUiModel,
+    isSelectionModeEnabled: Boolean,
+    onAction: (MessageAction) -> Unit,
+    onSelect: () -> Unit
+) {
     when (message.type) {
-        MessageType.TEXT -> TextContent(message)
+        MessageType.TEXT -> TextContent(message, isSelectionModeEnabled, onSelect)
         MessageType.IMAGE, MessageType.VIDEO -> MediaContent(
             message = message,
+            isSelectionModeEnabled = isSelectionModeEnabled,
+            onSelect = onSelect,
             onMediaClick = { message.media?.url?.let { onAction(MessageAction.OpenMedia(it, message.type)) } }
         )
         MessageType.AUDIO -> AudioContent(
             message = message,
+            isSelectionModeEnabled = isSelectionModeEnabled,
+            onSelect = onSelect,
             onPlayToggle = {
                 if (message.audio?.isPlaying == true) onAction(MessageAction.PauseAudio(message))
                 else onAction(MessageAction.PlayAudio(message))
@@ -59,17 +72,20 @@ fun BubbleContents(message: MessageUiModel, onAction: (MessageAction) -> Unit) {
         )
         MessageType.DOCUMENT -> DocumentContent(
             message = message,
+            isSelectionModeEnabled = isSelectionModeEnabled,
+            onSelect = onSelect,
             onDownload = { message.media?.url?.let { onAction(MessageAction.DownloadMedia(it, message.type)) } }
         )
-        else -> TextContent(message)
+        else -> TextContent(message, isSelectionModeEnabled, onSelect)
     }
 }
 
 @Composable
-private fun TextContent(message: MessageUiModel) {
+private fun TextContent(message: MessageUiModel, isSelectionModeEnabled: Boolean, onSelect: () -> Unit) {
     val textColor = if (message.isMe) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
     val linkColor = if (message.isMe) MaterialTheme.colorScheme.inversePrimary else MaterialTheme.colorScheme.primary
     val uriHandler = LocalUriHandler.current
+    val haptic = LocalHapticFeedback.current
 
     val linkRegex = android.util.Patterns.WEB_URL.toRegex()
     val matchResult = linkRegex.find(message.content)
@@ -80,13 +96,7 @@ private fun TextContent(message: MessageUiModel) {
         for (match in linkRegex.findAll(message.content)) {
             append(message.content.substring(lastIndex, match.range.first))
             pushStringAnnotation(tag = "URL", annotation = match.value)
-            withStyle(
-                style = SpanStyle(
-                    color = linkColor,
-                    textDecoration = TextDecoration.Underline,
-                    fontWeight = FontWeight.Medium
-                )
-            ) {
+            withStyle(style = SpanStyle(color = linkColor, textDecoration = TextDecoration.Underline, fontWeight = FontWeight.Medium)) {
                 append(match.value)
             }
             pop()
@@ -95,45 +105,60 @@ private fun TextContent(message: MessageUiModel) {
         append(message.content.substring(lastIndex))
     }
 
+    var layoutResult by remember { mutableStateOf<TextLayoutResult?>(null) }
+
     Column {
-        ClickableText(
+        Text(
             text = annotatedString,
-            style = LocalTextStyle.current.copy(color = textColor, fontSize = 16.sp, lineHeight = 22.sp),
-            modifier = Modifier.padding(horizontal = 4.dp),
-            onClick = { offset ->
-                annotatedString.getStringAnnotations(tag = "URL", start = offset, end = offset)
-                    .firstOrNull()?.let { annotation ->
-                        var url = annotation.item
-                        if (!url.startsWith("http://") && !url.startsWith("https://")) {
-                            url = "https://$url"
+            color = textColor,
+            fontSize = 16.sp,
+            lineHeight = 22.sp,
+            modifier = Modifier
+                .padding(horizontal = 4.dp)
+                .pointerInput(message.id) {
+                    detectTapGestures(
+                        onLongPress = {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            onSelect()
+                        },
+                        onTap = { pos ->
+                            if (isSelectionModeEnabled) {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                onSelect()
+                            } else {
+                                layoutResult?.let { layout ->
+                                    val offset = layout.getOffsetForPosition(pos)
+                                    annotatedString.getStringAnnotations(tag = "URL", start = offset, end = offset)
+                                        .firstOrNull()?.let { annotation ->
+                                            var url = annotation.item
+                                            if (!url.startsWith("http://") && !url.startsWith("https://")) { url = "https://$url" }
+                                            try { uriHandler.openUri(url) } catch (e: Exception) {}
+                                        }
+                                }
+                            }
                         }
-                        try {
-                            uriHandler.openUri(url)
-                        } catch (e: Exception) {
-                            // No app to handle URL
-                        }
-                    }
-            }
+                    )
+                },
+            onTextLayout = { layoutResult = it }
         )
 
         if (firstUrl != null) {
             Spacer(modifier = Modifier.height(8.dp))
-            LinkPreviewWidget(url = firstUrl, isMe = message.isMe)
+            LinkPreviewWidget(url = firstUrl, isMe = message.isMe, isSelectionModeEnabled = isSelectionModeEnabled, onSelect = onSelect)
         }
     }
 }
 
 @Composable
-private fun LinkPreviewWidget(url: String, isMe: Boolean) {
-    // 🚀 ইনিশিয়াল ভ্যালু হিসেবে ক্যাশ চেক করা হচ্ছে
+private fun LinkPreviewWidget(url: String, isMe: Boolean, isSelectionModeEnabled: Boolean, onSelect: () -> Unit) {
     val previewData = remember { mutableStateOf<LinkPreviewData?>(LinkPreviewCacheManager.cache[url]) }
     val uriHandler = LocalUriHandler.current
+    val haptic = LocalHapticFeedback.current
 
     val bgColor = if (isMe) MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.08f) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.08f)
     val contentColor = if (isMe) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
 
     LaunchedEffect(url) {
-        // 🚀 ক্যাশে না থাকলে তবেই ওয়েবসাইট থেকে ডেটা আনবে
         if (previewData.value == null) {
             val fetchedData = fetchLinkPreview(url)
             if (fetchedData != null) {
@@ -150,143 +175,94 @@ private fun LinkPreviewWidget(url: String, isMe: Boolean) {
                 .padding(top = 4.dp, bottom = 2.dp)
                 .clip(RoundedCornerShape(8.dp))
                 .background(bgColor)
-                .clickable {
-                    try {
-                        uriHandler.openUri(data.url)
-                    } catch (e: Exception) { /* Handle Exception */ }
+                .pointerInput(url) {
+                    detectTapGestures(
+                        onLongPress = {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            onSelect()
+                        },
+                        onTap = {
+                            if (isSelectionModeEnabled) {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                onSelect()
+                            } else {
+                                try { uriHandler.openUri(data.url) } catch (e: Exception) {}
+                            }
+                        }
+                    )
                 }
         ) {
             if (data.imageUrl.isNotBlank()) {
                 AsyncImage(
-                    model = ImageRequest.Builder(LocalContext.current)
-                        .data(data.imageUrl)
-                        .crossfade(true)
-                        .build(),
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(140.dp)
-                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                    model = ImageRequest.Builder(LocalContext.current).data(data.imageUrl).crossfade(true).build(),
+                    contentDescription = null, contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxWidth().height(140.dp).background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
                 )
             }
             Column(modifier = Modifier.padding(10.dp)) {
-                if (data.title.isNotBlank()) {
-                    Text(
-                        text = data.title,
-                        color = contentColor,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 14.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
+                if (data.title.isNotBlank()) Text(text = data.title, color = contentColor, fontWeight = FontWeight.Bold, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 if (data.description.isNotBlank()) {
                     Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = data.description,
-                        color = contentColor.copy(alpha = 0.8f),
-                        fontSize = 12.sp,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
-                    )
+                    Text(text = data.description, color = contentColor.copy(alpha = 0.8f), fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 }
-                Spacer(modifier = Modifier.height(6.dp))
-                Text(
-                    text = url,
-                    color = contentColor.copy(alpha = 0.6f),
-                    fontSize = 10.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
             }
         }
     }
 }
 
-data class LinkPreviewData(
-    val url: String,
-    val title: String,
-    val description: String,
-    val imageUrl: String
-)
+data class LinkPreviewData(val url: String, val title: String, val description: String, val imageUrl: String)
 
 suspend fun fetchLinkPreview(urlStr: String): LinkPreviewData? = withContext(Dispatchers.IO) {
     try {
         var url = urlStr
-        if (!url.startsWith("http://") && !url.startsWith("https://")) {
-            url = "https://$url"
-        }
-
-        val document = Jsoup.connect(url)
-            .userAgent("Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)")
-            .header("Accept-Language", "en-US,en;q=0.9")
-            .referrer("https://www.google.com/")
-            .followRedirects(true)
-            .ignoreHttpErrors(true)
-            .timeout(10000)
-            .get()
-
+        if (!url.startsWith("http://") && !url.startsWith("https://")) url = "https://$url"
+        val document = Jsoup.connect(url).userAgent("Mozilla/5.0").timeout(5000).get()
         val title = document.select("meta[property=og:title]").attr("content").takeIf { it.isNotBlank() } ?: document.title()
-        val description = document.select("meta[property=og:description]").attr("content").takeIf { it.isNotBlank() }
-            ?: document.select("meta[name=description]").attr("content")
-
         val imageUrl = document.select("meta[property=og:image]").attr("content").takeIf { it.isNotBlank() } ?: ""
-
-        if (title.contains("Error Facebook", ignoreCase = true) || title.equals("Error", ignoreCase = true) || title.contains("Log in to Facebook", ignoreCase = true)) {
-            return@withContext null
-        }
-
-        if (title.isBlank() && description.isBlank() && imageUrl.isBlank()) {
-            return@withContext null
-        }
-
-        LinkPreviewData(url, title, description, imageUrl)
-    } catch (e: Exception) {
-        Log.e("LinkPreview", "Error fetching preview for $urlStr: ${e.message}")
-        null
-    }
+        if (title.isBlank() && imageUrl.isBlank()) return@withContext null
+        LinkPreviewData(url, title, "", imageUrl)
+    } catch (e: Exception) { null }
 }
 
 @Composable
-private fun MediaContent(message: MessageUiModel, onMediaClick: () -> Unit) {
-    val textColor = if (message.isMe) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
-    Column {
-        Box(modifier = Modifier.clip(RoundedCornerShape(14.dp)).clickable { onMediaClick() }) {
-            AsyncImage(
-                model = ImageRequest.Builder(LocalContext.current)
-                    .data(message.media?.url)
-                    .crossfade(true)
-                    .build(),
-                contentDescription = stringResource(R.string.chat_media_desc),
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxWidth().height(BubbleDimens.MediaHeight).background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+private fun MediaContent(message: MessageUiModel, isSelectionModeEnabled: Boolean, onSelect: () -> Unit, onMediaClick: () -> Unit) {
+    val haptic = LocalHapticFeedback.current
+    Box(modifier = Modifier.clip(RoundedCornerShape(14.dp))
+        .pointerInput(message.id) {
+            detectTapGestures(
+                onLongPress = { haptic.performHapticFeedback(HapticFeedbackType.LongPress); onSelect() },
+                onTap = { if (isSelectionModeEnabled) { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); onSelect() } else onMediaClick() }
             )
-            if (message.type == MessageType.VIDEO) {
-                Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.35f)), contentAlignment = Alignment.Center) {
-                    Icon(Icons.Default.Videocam, contentDescription = "Play Video", tint = MaterialTheme.colorScheme.inverseOnSurface, modifier = Modifier.size(48.dp))
-                }
-            }
         }
-        if (message.content.isNotBlank()) {
-            Text(text = message.content, color = textColor, fontSize = 15.sp, modifier = Modifier.padding(top = 6.dp, start = 4.dp, end = 4.dp))
-        }
+    ) {
+        AsyncImage(
+            model = ImageRequest.Builder(LocalContext.current).data(message.media?.url).crossfade(true).build(),
+            contentDescription = null, contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxWidth().height(BubbleDimens.MediaHeight).background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+        )
     }
 }
 
 @Composable
-private fun AudioContent(message: MessageUiModel, onPlayToggle: () -> Unit) {
+private fun AudioContent(message: MessageUiModel, isSelectionModeEnabled: Boolean, onSelect: () -> Unit, onPlayToggle: () -> Unit) {
     val textColor = if (message.isMe) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
     val isPlaying = message.audio?.isPlaying == true
-
+    val haptic = LocalHapticFeedback.current
+    
     Row(modifier = Modifier.widthIn(min = 200.dp).padding(6.dp), verticalAlignment = Alignment.CenterVertically) {
         Box(
-            modifier = Modifier.size(38.dp).clip(CircleShape).background(if (message.isMe) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primaryContainer).clickable { onPlayToggle() },
+            modifier = Modifier.size(38.dp).clip(CircleShape).background(if (message.isMe) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primaryContainer)
+                .pointerInput(message.id) {
+                    detectTapGestures(
+                        onLongPress = { haptic.performHapticFeedback(HapticFeedbackType.LongPress); onSelect() },
+                        onTap = { if (isSelectionModeEnabled) { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); onSelect() } else onPlayToggle() }
+                    )
+                },
             contentAlignment = Alignment.Center
         ) {
             Icon(
                 imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                contentDescription = stringResource(if (isPlaying) R.string.desc_pause_audio else R.string.desc_play_audio),
+                contentDescription = null,
                 tint = if (message.isMe) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onPrimaryContainer
             )
         }
@@ -304,12 +280,19 @@ private fun AudioContent(message: MessageUiModel, onPlayToggle: () -> Unit) {
 }
 
 @Composable
-private fun DocumentContent(message: MessageUiModel, onDownload: () -> Unit) {
+private fun DocumentContent(message: MessageUiModel, isSelectionModeEnabled: Boolean, onSelect: () -> Unit, onDownload: () -> Unit) {
     val textColor = if (message.isMe) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
     val timeColor = textColor.copy(alpha = 0.7f)
-
+    val haptic = LocalHapticFeedback.current
+    
     Row(
-        modifier = Modifier.widthIn(min = 220.dp).clip(RoundedCornerShape(10.dp)).background(textColor.copy(alpha = 0.06f)).clickable { onDownload() }.padding(10.dp),
+        modifier = Modifier.widthIn(min = 220.dp).clip(RoundedCornerShape(10.dp)).background(textColor.copy(alpha = 0.06f)).padding(10.dp)
+            .pointerInput(message.id) {
+                detectTapGestures(
+                    onLongPress = { haptic.performHapticFeedback(HapticFeedbackType.LongPress); onSelect() },
+                    onTap = { if (isSelectionModeEnabled) { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); onSelect() } else onDownload() }
+                )
+            },
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(modifier = Modifier.size(38.dp).clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)), contentAlignment = Alignment.Center) {

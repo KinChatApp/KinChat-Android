@@ -1,69 +1,42 @@
 package com.kinchat.app.features.chat.ui
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyListState
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.kinchat.app.domain.model.ChatMessage
 import com.kinchat.app.features.chat.ui.actions.MessageAction
-import com.kinchat.app.features.chat.ui.components.ChatInput
-import com.kinchat.app.features.chat.ui.components.MessageBubble
-import com.kinchat.app.features.chat.ui.components.ChatHeaderInfo
-import com.kinchat.app.features.chat.ui.components.ChatHeaderActions
-import com.kinchat.app.features.chat.ui.components.ChatHeaderMenu
-import com.kinchat.app.features.chat.ui.mapper.MessageUiMapper
-import com.kinchat.app.features.chat.ui.models.MessageUiModel
+import com.kinchat.app.features.chat.ui.components.ChatBottomBarSection
+import com.kinchat.app.features.chat.ui.components.ChatDeleteBottomSheet
+import com.kinchat.app.features.chat.ui.components.ChatMessageList
+import com.kinchat.app.features.chat.ui.components.ChatNormalTopBar
+import com.kinchat.app.features.chat.ui.components.ChatSelectionTopBar
+import com.kinchat.app.features.chat.ui.components.SendErrorDialog
+import com.kinchat.app.features.chat.ui.utils.MessagePermissions
 import com.kinchat.app.features.chat.viewmodel.ChatViewModel
 import com.kinchat.app.features.chat.viewmodel.PartnerUiState
+import com.kinchat.app.features.chat.viewmodel.SendMessageResult
 import kotlinx.coroutines.launch
-import java.time.Instant
-import java.time.LocalDate
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
-
-private sealed class ChatListItem {
-    data class Msg(val uiModel: MessageUiModel) : ChatListItem()
-    data class Header(val date: LocalDate, val label: String) : ChatListItem()
-}
-
-private fun localDateOf(instantStr: String?): LocalDate {
-    if (instantStr == null) return LocalDate.now()
-    return try {
-        Instant.parse(instantStr).atZone(ZoneId.systemDefault()).toLocalDate()
-    } catch (e: Exception) {
-        LocalDate.now()
-    }
-}
-
-private fun dateLabelFor(date: LocalDate): String {
-    val today = LocalDate.now()
-    return when {
-        date == today -> "Today"
-        date == today.minusDays(1) -> "Yesterday"
-        date.year == today.year -> date.format(DateTimeFormatter.ofPattern("MMMM d"))
-        else -> date.format(DateTimeFormatter.ofPattern("MMMM d, yyyy"))
-    }
-}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -73,232 +46,175 @@ fun ChatScreen(
     onNavigateToInfo: (String) -> Unit,
     viewModel: ChatViewModel = hiltViewModel()
 ) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val snackbarHostState = remember { SnackbarHostState() }
+
     val messages by viewModel.messages.collectAsState()
     val isPartnerTyping by viewModel.isPartnerTyping.collectAsState()
     val isPartnerOnline by viewModel.isPartnerOnline.collectAsState()
     val partnerState by viewModel.partnerState.collectAsState()
+    val selectedMessages by viewModel.selectedMessages.collectAsState()
 
     val listState = rememberLazyListState()
-
-    var selectedMessageId by remember { mutableStateOf<String?>(null) }
     var replyingTo by remember { mutableStateOf<ChatMessage?>(null) }
+    var editingMessage by remember { mutableStateOf<ChatMessage?>(null) }
+    var showDeleteSheet by remember { mutableStateOf(false) }
     var isMenuExpanded by remember { mutableStateOf(false) }
+    var sendErrorText by remember { mutableStateOf<String?>(null) }
 
-    LaunchedEffect(chatId) {
-        viewModel.initializeChat(chatId)
-    }
+    LaunchedEffect(chatId) { viewModel.initializeChat(chatId) }
 
-    val displayName = when (partnerState) {
-        is PartnerUiState.Loading -> "Loading..."
-        is PartnerUiState.Success -> (partnerState as PartnerUiState.Success).name
-        is PartnerUiState.Error -> "Unknown User"
-    }
-
+    val displayName = (partnerState as? PartnerUiState.Success)?.name ?: "Loading..."
     val partnerId = (partnerState as? PartnerUiState.Success)?.id ?: ""
+    val isSelectionMode = selectedMessages.isNotEmpty()
+
+    val selectedMsgsList = remember(selectedMessages, messages) {
+        messages.filter { it.id in selectedMessages }
+    }
+
+    val canEdit = remember(selectedMsgsList) {
+        MessagePermissions.canEdit(selectedMsgsList, viewModel.currentUserId)
+    }
+
+    val canDeleteForEveryone = remember(selectedMsgsList) {
+        MessagePermissions.canDeleteForEveryone(selectedMsgsList, viewModel.currentUserId)
+    }
 
     val chatItems = remember(messages, viewModel.currentUserId, displayName) {
-        val result = mutableListOf<ChatListItem>()
-        var lastDate: LocalDate? = null
-
-        messages.forEachIndexed { index, msg ->
-            val msgDate = localDateOf(msg.createdAt)
-            if (msgDate != lastDate) {
-                result.add(ChatListItem.Header(msgDate, dateLabelFor(msgDate)))
-                lastDate = msgDate
-            }
-
-            val prev = messages.getOrNull(index - 1)
-            val next = messages.getOrNull(index + 1)
-            val prevSameGroup = prev != null && prev.senderId == msg.senderId && localDateOf(prev.createdAt) == msgDate
-            val nextSameGroup = next != null && next.senderId == msg.senderId && localDateOf(next.createdAt) == msgDate
-
-            val uiModel = MessageUiMapper.mapToUiModel(
-                entity = msg,
-                currentUserId = viewModel.currentUserId,
-                partnerName = displayName,
-                isTopInGroup = !prevSameGroup,
-                showTail = !nextSameGroup,
-                replyMessage = msg.replyToId?.let { replyId -> messages.find { it.id == replyId } }
-            )
-
-            result.add(ChatListItem.Msg(uiModel))
-        }
-        result.reversed()
+        ChatItemsBuilder.build(messages, viewModel.currentUserId, displayName)
     }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
-            TopAppBar(
-                title = {
-                    ChatHeaderInfo(
-                        partnerAvatarUrl = null,
-                        displayName = displayName,
-                        isPartnerTyping = isPartnerTyping,
-                        isPartnerOnline = isPartnerOnline,
-                        onBack = onBack,
-                        onGoToInfo = {
-                            if (partnerId.isNotEmpty()) onNavigateToInfo(partnerId)
-                        }
-                    )
-                },
-                actions = {
-                    ChatHeaderActions(
-                        isMessageSelected = selectedMessageId != null,
-                        isSaved = false,
-                        onToggleSave = { selectedMessageId?.let { viewModel.toggleSaveMessage(it) } },
-                        onAudioCall = { },
-                        onVideoCall = { }
-                    ) {
-                        ChatHeaderMenu(
-                            isMenuExpanded = isMenuExpanded,
-                            isMuted = false,
-                            isBlocked = false,
-                            onMenuToggle = { isMenuExpanded = it },
-                            onGoToInfo = {
-                                if (partnerId.isNotEmpty()) onNavigateToInfo(partnerId)
-                            },
-                            onAction = { }
-                        )
+            if (isSelectionMode) {
+                ChatSelectionTopBar(
+                    selectedCount = selectedMessages.size,
+                    onClearSelection = { viewModel.clearSelection() },
+                    onToggleSave = {
+                        viewModel.toggleSaveMessage(selectedMessages.first())
+                        scope.launch { snackbarHostState.showSnackbar("Saved to Bookmarks") }
+                        viewModel.clearSelection()
+                    },
+                    onPinRequested = {
+                        scope.launch { snackbarHostState.showSnackbar("Pin feature coming soon") }
+                        viewModel.clearSelection()
+                    },
+                    onInfoRequested = {
+                        scope.launch { snackbarHostState.showSnackbar("Message Info coming soon") }
+                        viewModel.clearSelection()
                     }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    titleContentColor = MaterialTheme.colorScheme.onSurface
                 )
-            )
+            } else {
+                ChatNormalTopBar(
+                    displayName = displayName,
+                    partnerId = partnerId,
+                    isPartnerTyping = isPartnerTyping,
+                    isPartnerOnline = isPartnerOnline,
+                    isMenuExpanded = isMenuExpanded,
+                    onMenuToggle = { isMenuExpanded = it },
+                    onBack = onBack,
+                    onNavigateToInfo = onNavigateToInfo
+                )
+            }
         },
         bottomBar = {
-            ChatInput(
-                onSendMessage = { text ->
-                    // ✅ Boolean চেক করে তারপর reply স্টেট ক্লিয়ার করা হচ্ছে
-                    val success = viewModel.sendMessage(text, replyingTo?.id)
-                    if (success) {
-                        replyingTo = null
-                    }
-                    success
+            ChatBottomBarSection(
+                isSelectionMode = isSelectionMode,
+                canEdit = canEdit,
+                canReply = selectedMessages.size == 1,
+                onEditRequested = {
+                    editingMessage = selectedMsgsList.first()
+                    replyingTo = null
+                    viewModel.clearSelection()
                 },
-                updateTypingStatus = { },
+                onReplyRequested = {
+                    replyingTo = selectedMsgsList.first()
+                    editingMessage = null
+                    viewModel.clearSelection()
+                },
+                onForwardRequested = {
+                    scope.launch { snackbarHostState.showSnackbar("Forwarding not implemented yet") }
+                    viewModel.clearSelection()
+                },
+                onCopyRequested = {
+                    val textToCopy = selectedMsgsList.joinToString("\n") { it.content ?: "" }
+                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                    clipboard.setPrimaryClip(ClipData.newPlainText("Copied Messages", textToCopy))
+                    scope.launch { snackbarHostState.showSnackbar("Messages Copied") }
+                    viewModel.clearSelection()
+                },
+                onDeleteRequested = { showDeleteSheet = true },
+                onSendMessage = { text ->
+                    if (editingMessage != null) {
+                        viewModel.editMessage(editingMessage!!.id, text)
+                        editingMessage = null
+                        true
+                    } else {
+                        val replyId = replyingTo?.id
+                        replyingTo = null
+
+                        when (val result = viewModel.sendMessage(text, replyId)) {
+                            is SendMessageResult.Success -> true
+                            is SendMessageResult.Failure -> {
+                                sendErrorText = result.reason
+                                false
+                            }
+                        }
+                    }
+                },
+                updateTypingStatus = {},
                 partnerName = displayName,
                 replyingToMessage = replyingTo,
-                replyingToIsMe = replyingTo?.senderId == viewModel.currentUserId,
-                onCancelReply = { replyingTo = null }
+                editingMessage = editingMessage,
+                onCancelReply = { replyingTo = null; editingMessage = null }
             )
-        },
-        containerColor = MaterialTheme.colorScheme.background
+        }
     ) { paddingValues ->
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .background(Brush.verticalGradient(colors = listOf(MaterialTheme.colorScheme.surface, MaterialTheme.colorScheme.background)))
+                .background(MaterialTheme.colorScheme.background)
         ) {
-            ChatListContent(
+            ChatMessageList(
                 chatItems = chatItems,
                 messagesCount = messages.size,
                 listState = listState,
-                selectedMessageId = selectedMessageId,
-                onMessageSelect = { id ->
-                    selectedMessageId = if (selectedMessageId == id) null else id
-                },
+                selectedMessages = selectedMessages,
+                isSelectionMode = isSelectionMode,
+                onMessageSelect = { viewModel.toggleSelection(it) },
                 onMessageAction = { action ->
                     when (action) {
                         is MessageAction.Reply -> {
                             replyingTo = messages.find { it.id == action.message.id }
+                            editingMessage = null
                         }
-                        is MessageAction.DeleteForMe -> viewModel.deleteMessage(action.message.id, "for_me")
-                        is MessageAction.DeleteForEveryone -> viewModel.deleteMessage(action.message.id, "for_everyone")
-                        is MessageAction.PlayAudio -> { /* TODO */ }
-                        is MessageAction.PauseAudio -> { /* TODO */ }
-                        is MessageAction.JoinCall -> { /* TODO */ }
-                        is MessageAction.DownloadMedia -> { /* TODO */ }
-                        is MessageAction.OpenMedia -> { /* TODO */ }
+                        is MessageAction.React -> {
+                            viewModel.addReaction(action.messageId, action.reaction)
+                            viewModel.clearSelection()
+                        }
+                        else -> {}
                     }
-                    selectedMessageId = null
                 }
             )
         }
     }
-}
 
-@Composable
-private fun ChatListContent(
-    chatItems: List<ChatListItem>,
-    messagesCount: Int,
-    listState: LazyListState,
-    selectedMessageId: String?,
-    onMessageSelect: (String) -> Unit,
-    onMessageAction: (MessageAction) -> Unit
-) {
-    val scope = rememberCoroutineScope()
-    val showScrollToBottom by remember { derivedStateOf { listState.firstVisibleItemIndex > 3 } }
-
-    LaunchedEffect(messagesCount) {
-        if (messagesCount > 0) {
-            listState.animateScrollToItem(0)
-        }
+    if (showDeleteSheet) {
+        ChatDeleteBottomSheet(
+            canDeleteForEveryone = canDeleteForEveryone,
+            onDismiss = { showDeleteSheet = false },
+            onDeleteForMe = { viewModel.deleteSelectedMessages("for_me"); showDeleteSheet = false },
+            onDeleteForEveryone = { viewModel.deleteSelectedMessages("for_everyone"); showDeleteSheet = false }
+        )
     }
 
-    LazyColumn(
-        state = listState,
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(top = 12.dp, bottom = 12.dp),
-        reverseLayout = true
-    ) {
-        items(
-            items = chatItems,
-            key = { item ->
-                when (item) {
-                    is ChatListItem.Msg -> item.uiModel.id
-                    is ChatListItem.Header -> "header_${item.date}"
-                }
-            },
-            contentType = { item ->
-                when (item) {
-                    is ChatListItem.Msg -> "message_bubble"
-                    is ChatListItem.Header -> "date_header"
-                }
-            }
-        ) { item ->
-            when (item) {
-                is ChatListItem.Header -> DateSeparator(item.label)
-                is ChatListItem.Msg -> {
-                    MessageBubble(
-                        message = item.uiModel,
-                        isSelected = selectedMessageId == item.uiModel.id,
-                        onSelect = { onMessageSelect(item.uiModel.id) },
-                        onAction = onMessageAction
-                    )
-                }
-            }
-        }
-    }
-
-    AnimatedVisibility(
-        visible = showScrollToBottom,
-        modifier = Modifier
-            .fillMaxSize()
-            .wrapContentSize(Alignment.BottomEnd)
-            .padding(16.dp),
-        enter = fadeIn() + scaleIn(),
-        exit = fadeOut() + scaleOut()
-    ) {
-        SmallFloatingActionButton(
-            onClick = { scope.launch { listState.animateScrollToItem(0) } },
-            containerColor = MaterialTheme.colorScheme.primaryContainer,
-            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-        ) {
-            Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Scroll to latest")
-        }
-    }
-}
-
-@Composable
-private fun DateSeparator(label: String) {
-    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp), horizontalArrangement = Arrangement.Center) {
-        Box(
-            modifier = Modifier.clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceVariant).padding(horizontal = 12.dp, vertical = 4.dp)
-        ) {
-            Text(text = label, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Medium)
-        }
+    sendErrorText?.let { errorText ->
+        SendErrorDialog(
+            errorText = errorText,
+            onDismiss = { sendErrorText = null }
+        )
     }
 }

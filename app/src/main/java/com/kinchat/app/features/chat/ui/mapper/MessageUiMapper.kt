@@ -136,13 +136,14 @@ object MessageUiMapper {
     }
 
     private fun mapReplyState(entity: ChatMessage, replyMessage: ChatMessage?, partnerName: String, currentUserId: String): ReplyPreviewUiState? {
-        val replyId = entity.replyToId ?: return null
-        
+        // 🚀 FIX: ফাঁকা স্ট্রিং বা "null" টেক্সট ফিল্টার করে বাদ দেওয়া হলো
+        val replyId = entity.replyToId?.takeIf { it.isNotBlank() && it != "null" } ?: return null
+
         // 🚀 FIX: যদি অরিজিনাল মেসেজটি খুঁজে পাওয়া যায়, তবে তার কন্টেন্ট এক্সট্রাক্ট করা হচ্ছে
         if (replyMessage != null) {
             val isReplyMe = replyMessage.senderId == currentUserId
             val senderName = if (isReplyMe) "You" else partnerName
-            
+
             val previewText = when (replyMessage.type) {
                 "image" -> "📷 Photo"
                 "video" -> "📹 Video"
