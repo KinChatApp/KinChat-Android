@@ -1,77 +1,50 @@
 package com.kinchat.app.data.repository
 
+import com.kinchat.app.data.local.db.ChatParticipantDao
+import com.kinchat.app.data.local.db.PendingOperationDao
+import com.kinchat.app.data.repository.settings.ChatLocalSettingsHandler
+import com.kinchat.app.data.repository.settings.ChatRemoteSettingsHandler
 import io.github.jan.supabase.SupabaseClient
-import io.github.jan.supabase.gotrue.auth
-import io.github.jan.supabase.postgrest.postgrest
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import kotlinx.serialization.json.JsonObject
 
-class ChatSettingsManager(private val supabaseClient: SupabaseClient) {
+/**
+ * 🚀 Facade Manager for Chat Settings.
+ * Implementation logic has been aggressively extracted into smaller components
+ * (ChatLocalSettingsHandler & ChatRemoteSettingsHandler) following SRP.
+ */
+class ChatSettingsManager(
+    supabaseClient: SupabaseClient,
+    chatParticipantDao: ChatParticipantDao,
+    pendingOperationDao: PendingOperationDao
+) {
+    // Extracted components instantiated internally to prevent breaking existing DI definitions.
+    private val localSettingsHandler = ChatLocalSettingsHandler(chatParticipantDao, pendingOperationDao)
+    private val remoteSettingsHandler = ChatRemoteSettingsHandler(supabaseClient)
 
-    private val currentUserId: String?
-        get() = supabaseClient.auth.currentUserOrNull()?.id
-
-    suspend fun updateLastRead(chatId: String, userId: String): Result<Unit> = runCatching {
-        supabaseClient.postgrest["chat_participants"].update(mapOf("last_read_at" to java.time.Instant.now().toString())) { filter { eq("chat_id", chatId) ; eq("user_id", userId) } }
+    suspend fun updateChatPinStatus(chatId: String, userId: String, isPinned: Boolean): Result<Unit> {
+        return localSettingsHandler.updatePinStatus(chatId, userId, isPinned)
     }
 
-    suspend fun updateChatPinStatus(chatId: String, isPinned: Boolean): Result<Unit> = withContext(Dispatchers.IO) {
-        runCatching {
-            val userId = currentUserId ?: throw Exception("Unauthorized")
-            supabaseClient.postgrest["chat_participants"].update(mapOf("is_pinned" to isPinned)) { filter { eq("chat_id", chatId); eq("user_id", userId) } }
-            Unit
-        }
+    suspend fun updateChatMuteStatus(chatId: String, userId: String, isMuted: Boolean): Result<Unit> {
+        return localSettingsHandler.updateMuteStatus(chatId, userId, isMuted)
     }
 
-    suspend fun updateChatFavoriteStatus(chatId: String, isFavorite: Boolean): Result<Unit> = withContext(Dispatchers.IO) {
-        runCatching {
-            val userId = currentUserId ?: throw Exception("Unauthorized")
-            supabaseClient.postgrest["chat_participants"].update(mapOf("is_favorite" to isFavorite)) { filter { eq("chat_id", chatId); eq("user_id", userId) } }
-            Unit
-        }
+    suspend fun updateChatArchiveStatus(chatId: String, userId: String, isArchived: Boolean): Result<Unit> {
+        return localSettingsHandler.updateArchiveStatus(chatId, userId, isArchived)
     }
 
-    suspend fun updateChatArchiveStatus(chatId: String, isArchived: Boolean): Result<Unit> = withContext(Dispatchers.IO) {
-        runCatching {
-            val userId = currentUserId ?: throw Exception("Unauthorized")
-            supabaseClient.postgrest["chat_participants"].update(mapOf("is_archived" to isArchived)) { filter { eq("chat_id", chatId); eq("user_id", userId) } }
-            Unit
-        }
+    suspend fun deleteChatParticipant(chatId: String, userId: String): Result<Unit> {
+        return localSettingsHandler.updateHiddenStatus(chatId, userId)
     }
 
-    suspend fun updateChatMuteStatus(chatId: String, isMuted: Boolean): Result<Unit> = withContext(Dispatchers.IO) {
-        runCatching {
-            val userId = currentUserId ?: throw Exception("Unauthorized")
-            supabaseClient.postgrest["chat_participants"].update(mapOf("is_muted" to isMuted)) { filter { eq("chat_id", chatId); eq("user_id", userId) } }
-            Unit
-        }
+    suspend fun updateLastRead(chatId: String, userId: String): Result<Unit> {
+        return localSettingsHandler.updateLastRead(chatId, userId)
     }
 
-    suspend fun updateChatBlockStatus(chatId: String, isBlocked: Boolean): Result<Unit> = withContext(Dispatchers.IO) {
-        runCatching {
-            val userId = currentUserId ?: throw Exception("Unauthorized")
-            val participants = supabaseClient.postgrest["chat_participants"]
-                .select { filter { eq("chat_id", chatId); neq("user_id", userId) } }
-                .decodeList<JsonObject>()
-
-            val partnerId = participants.firstOrNull()?.get("user_id")?.toString()?.replace("\"", "")
-                ?: throw Exception("Partner not found")
-
-            if (isBlocked) {
-                supabaseClient.postgrest["user_blocks"].insert(mapOf("blocker_id" to userId, "blocked_id" to partnerId))
-            } else {
-                supabaseClient.postgrest["user_blocks"].delete { filter { eq("blocker_id", userId); eq("blocked_id", partnerId) } }
-            }
-            Unit
-        }
+    suspend fun updateChatFavoriteStatus(chatId: String, isFavorite: Boolean): Result<Unit> {
+        return remoteSettingsHandler.updateFavoriteStatus(chatId, isFavorite)
     }
 
-    suspend fun deleteChatParticipant(chatId: String): Result<Unit> = withContext(Dispatchers.IO) {
-        runCatching {
-            val userId = currentUserId ?: throw Exception("Unauthorized")
-            supabaseClient.postgrest["chat_participants"].update(mapOf("is_deleted" to true)) { filter { eq("chat_id", chatId); eq("user_id", userId) } }
-            Unit
-        }
+    suspend fun updateChatBlockStatus(chatId: String, isBlocked: Boolean): Result<Unit> {
+        return remoteSettingsHandler.updateBlockStatus(chatId, isBlocked)
     }
 }

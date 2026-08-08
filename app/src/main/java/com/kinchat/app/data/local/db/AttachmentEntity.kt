@@ -20,8 +20,8 @@ import androidx.room.PrimaryKey
 data class AttachmentEntity(
     @PrimaryKey val id: String,
     val messageId: String,
-    val fileUrl: String?,
-    
+    val fileUrl: String?, // ImageKit-এর Remote URL আপলোডের পর এখানে সেভ হবে
+
     // Metadata for UI
     val mimeType: String?,
     val fileName: String?,
@@ -30,9 +30,11 @@ data class AttachmentEntity(
     val height: Int? = null,
     val duration: Long? = null, // For video/audio
     val thumbnailUrl: String? = null,
-    
     val createdAt: Long,
-    
+
+    // ImageKit Specific
+    val imageKitFileId: String? = null, // ফাইল পরবর্তীতে ডিলিট/ম্যানেজ করার জন্য
+
     // Offline-First Fields
     val localUri: String? = null,
     val uploadState: UploadState = UploadState.PENDING

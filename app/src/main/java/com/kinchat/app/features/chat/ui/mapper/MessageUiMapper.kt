@@ -22,13 +22,13 @@ object MessageUiMapper {
         partnerName: String,
         isTopInGroup: Boolean = false,
         showTail: Boolean = true,
-        replyMessage: ChatMessage? = null // 🚀 FIX: রিপ্লাই করা মেসেজটি রিসিভ করার জন্য প্যারামিটার
+        replyMessage: ChatMessage? = null
     ): MessageUiModel {
         val isMe = entity.senderId == currentUserId
         val type = MessageType.from(entity.type ?: "text")
 
         return MessageUiModel(
-            id = entity.id,
+            id = entity.id ?: "", // Added ?: "" fallback
             content = entity.content ?: "",
             rawTimestamp = parseTimestamp(entity.createdAt),
             formattedTime = formatTime(entity.createdAt),
@@ -46,7 +46,6 @@ object MessageUiMapper {
             media = mapMediaState(entity),
             audio = mapAudioState(entity),
             call = mapCallState(entity, isMe),
-            // 🚀 FIX: এখানে অরিজিনাল মেসেজ ডেটা পাস করা হলো
             reply = mapReplyState(entity, replyMessage, partnerName, currentUserId),
             reactions = mapReactions(entity, currentUserId)
         )
@@ -81,8 +80,8 @@ object MessageUiMapper {
     private fun mapMediaState(entity: ChatMessage): MediaUiState? {
         val attachment = entity.attachments?.firstOrNull() ?: return null
         return MediaUiState(
-            url = attachment.fileUrl,
-            fileName = attachment.fileName,
+            url = attachment.fileUrl ?: "", // FIX: Added fallback to empty string
+            fileName = attachment.fileName ?: "", // FIX: Added fallback to empty string
             rawSizeBytes = attachment.fileSize,
             formattedSize = FileFormatter.formatSize(attachment.fileSize ?: 0L)
         )
@@ -90,7 +89,6 @@ object MessageUiMapper {
 
     private fun mapAudioState(entity: ChatMessage): AudioUiState? {
         if (entity.type != "audio") return null
-        // 🚀 FIX: JsonObject থেকে ডেটা রিড করার জন্য kotlinx.serialization এর ফাংশন
         val duration = entity.metadata?.get("duration")?.jsonPrimitive?.intOrNull ?: 0
         val url = entity.attachments?.firstOrNull()?.fileUrl ?: return null
         return AudioUiState(url = url, durationSeconds = duration)
@@ -136,10 +134,8 @@ object MessageUiMapper {
     }
 
     private fun mapReplyState(entity: ChatMessage, replyMessage: ChatMessage?, partnerName: String, currentUserId: String): ReplyPreviewUiState? {
-        // 🚀 FIX: ফাঁকা স্ট্রিং বা "null" টেক্সট ফিল্টার করে বাদ দেওয়া হলো
         val replyId = entity.replyToId?.takeIf { it.isNotBlank() && it != "null" } ?: return null
 
-        // 🚀 FIX: যদি অরিজিনাল মেসেজটি খুঁজে পাওয়া যায়, তবে তার কন্টেন্ট এক্সট্রাক্ট করা হচ্ছে
         if (replyMessage != null) {
             val isReplyMe = replyMessage.senderId == currentUserId
             val senderName = if (isReplyMe) "You" else partnerName
@@ -159,7 +155,6 @@ object MessageUiMapper {
             )
         }
 
-        // যদি মেসেজটি অনেক পুরানো হয় এবং লোকাল লিস্টে না থাকে (Fallback)
         return ReplyPreviewUiState(
             messageId = replyId,
             senderName = "User",
@@ -172,7 +167,7 @@ object MessageUiMapper {
         return reactions.groupBy { it.reaction }
             .map { (typeStr, list) ->
                 ReactionUiState(
-                    type = ReactionType.from(typeStr),
+                    type = ReactionType.from(typeStr ?: ""), 
                     count = list.size,
                     isSelectedByMe = list.any { it.userId == currentUserId }
                 )

@@ -11,3 +11,13 @@ data class MessageInsertPayload(
     val type: String,
     @SerialName("reply_to_id") val replyToId: String? = null
 )
+
+// 🚀 Edge Function Payload
+@Serializable
+data class SendMessageRequest(
+    val chatId: String,
+    val messageId: String, // 🚀 FIX: messageId যুক্ত করা হলো
+    val senderId: String,
+    val content: String,
+    val replyToId: String? = null
+)

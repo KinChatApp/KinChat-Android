@@ -1,5 +1,8 @@
 package com.kinchat.app.features.chat.ui.components
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
@@ -40,7 +43,8 @@ import kotlinx.coroutines.launch
 
 @Composable
 fun ChatInput(
-    onSendMessage: suspend (String) -> Boolean, // 🚀 ফিক্স: suspend যোগ করা হয়েছে
+    onSendMessage: suspend (String) -> Boolean,
+    onMediaSelected: (Uri) -> Unit = {}, // 🚀 নতুন: মিডিয়া সিলেক্ট করার কলব্যাক
     updateTypingStatus: (Boolean) -> Unit,
     partnerName: String,
     replyingToMessage: ChatMessage? = null,
@@ -48,10 +52,23 @@ fun ChatInput(
     replyingToIsMe: Boolean = false,
     onCancelReply: () -> Unit = {}
 ) {
-    val coroutineScope = rememberCoroutineScope() // 🚀 ফিক্স: স্কোপ তৈরি করা হয়েছে
+    val coroutineScope = rememberCoroutineScope()
     var text by remember { mutableStateOf("") }
 
-    // 🚀 এডিট মোড অন হলে ইনপুট বক্সে আগের টেক্সট বসিয়ে দেওয়া হবে
+    // 🚀 ফাইল/ডকুমেন্ট পিকার লঞ্চার (সব ধরনের ফাইলের জন্য)
+    val filePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        uri?.let { onMediaSelected(it) }
+    }
+
+    // 🚀 ইমেজ পিকার লঞ্চার (ক্যামেরা আইকনের জন্য শুধু ছবি/ভিডিও)
+    val imagePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        uri?.let { onMediaSelected(it) }
+    }
+
     LaunchedEffect(editingMessage) {
         if (editingMessage != null) {
             text = editingMessage.content ?: ""
@@ -113,7 +130,9 @@ fun ChatInput(
             }
 
             Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.Bottom
             ) {
                 Row(
@@ -124,7 +143,11 @@ fun ChatInput(
                         .padding(horizontal = 6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    IconButton(onClick = { }) { Icon(Icons.Default.AttachFile, contentDescription = "Attach", tint = MaterialTheme.colorScheme.onSurfaceVariant) }
+                    // 🚀 Attach File Button - ক্লিক করলে ফাইল ম্যানেজার ওপেন হবে
+                    IconButton(onClick = { filePickerLauncher.launch("*/*") }) { 
+                        Icon(Icons.Default.AttachFile, contentDescription = "Attach", tint = MaterialTheme.colorScheme.onSurfaceVariant) 
+                    }
+                    
                     TextField(
                         value = text,
                         onValueChange = { text = it },
@@ -137,7 +160,11 @@ fun ChatInput(
                         maxLines = 5,
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Default)
                     )
-                    IconButton(onClick = { }) { Icon(Icons.Default.CameraAlt, contentDescription = "Camera", tint = MaterialTheme.colorScheme.onSurfaceVariant) }
+                    
+                    // 🚀 Camera/Image Button - ক্লিক করলে গ্যালারি ওপেন হবে
+                    IconButton(onClick = { imagePickerLauncher.launch("image/*") }) { 
+                        Icon(Icons.Default.CameraAlt, contentDescription = "Gallery", tint = MaterialTheme.colorScheme.onSurfaceVariant) 
+                    }
                 }
 
                 Spacer(modifier = Modifier.width(6.dp))
@@ -150,12 +177,11 @@ fun ChatInput(
                         .background(MaterialTheme.colorScheme.primary)
                         .clickable {
                             if (isTextPresent) {
-                                // 🚀 ফিক্স: coroutineScope-এর ভেতর কল করা হয়েছে
                                 coroutineScope.launch {
                                     val success = onSendMessage(text.trim())
                                     if (success) {
                                         text = ""
-                                        onCancelReply() // মেসেজ সেন্ড হলে রিপ্লাই/এডিট মোড ক্লিয়ার হবে
+                                        onCancelReply() 
                                     }
                                 }
                             }

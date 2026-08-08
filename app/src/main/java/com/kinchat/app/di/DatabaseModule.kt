@@ -21,38 +21,18 @@ object DatabaseModule {
             context,
             AppDatabase::class.java,
             "kinchat_database"
-        ).build()
+        )
+        .fallbackToDestructiveMigration() // 🚀 Easy migration for development
+        .build()
     }
 
-    @Provides
-    @Singleton
-    fun provideUserDao(appDatabase: AppDatabase): UserDao = appDatabase.userDao()
-
-    @Provides
-    @Singleton
-    fun provideChatDao(appDatabase: AppDatabase): ChatDao = appDatabase.chatDao()
-
-    @Provides
-    @Singleton
-    fun provideChatParticipantDao(appDatabase: AppDatabase): ChatParticipantDao = appDatabase.chatParticipantDao()
-
-    @Provides
-    @Singleton
-    fun provideChatMessageDao(appDatabase: AppDatabase): ChatMessageDao = appDatabase.chatMessageDao()
-
-    @Provides
-    @Singleton
-    fun provideAttachmentDao(appDatabase: AppDatabase): AttachmentDao = appDatabase.attachmentDao()
-
-    @Provides
-    @Singleton
-    fun provideMessageReactionDao(appDatabase: AppDatabase): MessageReactionDao = appDatabase.messageReactionDao()
-
-    @Provides
-    @Singleton
-    fun provideDraftDao(appDatabase: AppDatabase): DraftDao = appDatabase.draftDao()
-
-    @Provides
-    @Singleton
-    fun providePendingOperationDao(appDatabase: AppDatabase): PendingOperationDao = appDatabase.pendingOperationDao()
+    @Provides @Singleton fun provideUserDao(appDatabase: AppDatabase): UserDao = appDatabase.userDao()
+    @Provides @Singleton fun provideChatDao(appDatabase: AppDatabase): ChatDao = appDatabase.chatDao()
+    @Provides @Singleton fun provideChatParticipantDao(appDatabase: AppDatabase): ChatParticipantDao = appDatabase.chatParticipantDao()
+    @Provides @Singleton fun provideChatMessageDao(appDatabase: AppDatabase): ChatMessageDao = appDatabase.chatMessageDao()
+    @Provides @Singleton fun provideAttachmentDao(appDatabase: AppDatabase): AttachmentDao = appDatabase.attachmentDao()
+    @Provides @Singleton fun provideMessageReactionDao(appDatabase: AppDatabase): MessageReactionDao = appDatabase.messageReactionDao()
+    @Provides @Singleton fun provideDraftDao(appDatabase: AppDatabase): DraftDao = appDatabase.draftDao()
+    @Provides @Singleton fun providePendingOperationDao(appDatabase: AppDatabase): PendingOperationDao = appDatabase.pendingOperationDao()
+    @Provides @Singleton fun provideChatInsightsDao(appDatabase: AppDatabase): ChatInsightsDao = appDatabase.chatInsightsDao() // 🚀 NEW
 }

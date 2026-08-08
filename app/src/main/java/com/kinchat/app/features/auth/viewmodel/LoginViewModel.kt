@@ -1,9 +1,13 @@
 package com.kinchat.app.features.auth.viewmodel
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.kinchat.app.data.local.datastore.UserPreferencesManager
 import com.kinchat.app.domain.repository.AuthRepository
 import com.kinchat.app.domain.repository.RequestOtpResult
+import com.kinchat.app.features.auth.domain.provider.FcmTokenProvider
+import com.kinchat.app.features.auth.utils.PhoneFormatter
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -12,23 +16,11 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-enum class AuthStep { PHONE, EMAIL, OTP }
-
-data class LoginUiState(
-    val step: AuthStep = AuthStep.PHONE,
-    val countryCode: String = "+880",
-    val phoneNumber: String = "",
-    val email: String = "",
-    val otp: String = "",
-    val isNewUser: Boolean = false,
-    val isLoading: Boolean = false,
-    val error: String? = null,
-    val isSuccess: Boolean = false
-)
-
 @HiltViewModel
 class LoginViewModel @Inject constructor(
-    private val repository: AuthRepository
+    private val repository: AuthRepository,
+    private val userPreferencesManager: UserPreferencesManager,
+    private val fcmTokenProvider: FcmTokenProvider
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(LoginUiState())
@@ -39,12 +31,10 @@ class LoginViewModel @Inject constructor(
     }
 
     fun updatePhoneNumber(phone: String) {
-        val cleanPhone = phone.replace("\\s+".toRegex(), "")
+        val cleanPhone = PhoneFormatter.cleanPhoneNumber(phone)
         _uiState.update { it.copy(phoneNumber = cleanPhone, error = null) }
-        
-        // 🚀 Auto-submit logic: 10 digits (without 0) or 11 digits (with 0)
-        val expectedLength = if (cleanPhone.startsWith("0")) 11 else 10
-        if (cleanPhone.length == expectedLength && !_uiState.value.isLoading) {
+
+        if (PhoneFormatter.isReadyForSubmission(cleanPhone) && !_uiState.value.isLoading) {
             requestOtp()
         }
     }
@@ -54,36 +44,27 @@ class LoginViewModel @Inject constructor(
     }
 
     fun updateOtp(otp: String) {
-        val cleanOtp = otp.take(6)
-        _uiState.update { it.copy(otp = cleanOtp, error = null) }
+        val cleanOtp = PhoneFormatter.cleanOtp(otp)
         
-        if (cleanOtp.length == 6 && !_uiState.value.isLoading) {
+        if (_uiState.value.otp == cleanOtp) return 
+        
+        _uiState.update { it.copy(otp = cleanOtp, error = null) }
+
+        if (PhoneFormatter.isOtpValid(cleanOtp) && !_uiState.value.isLoading) {
             verifyOtp()
         }
-    }
-
-    // 🛠️ Helper: ০ (Zero) প্রবলেম ফিক্স করার জন্য
-    private fun getFullFormattedPhone(): String {
-        val state = _uiState.value
-        // যদি নাম্বারের শুরুতে 0 থাকে, তবে সেটি বাদ দিয়ে বাকিটুকু নেবে
-        val phoneWithoutLeadingZero = if (state.phoneNumber.startsWith("0")) {
-            state.phoneNumber.substring(1)
-        } else {
-            state.phoneNumber
-        }
-        return "${state.countryCode}${phoneWithoutLeadingZero}"
     }
 
     fun requestOtp() {
         val state = _uiState.value
         if (state.isLoading || state.phoneNumber.isEmpty()) return
 
-        val fullPhone = getFullFormattedPhone()
-        val emailToSend = if (state.step == AuthStep.EMAIL) state.email else null
+        val fullPhone = PhoneFormatter.getFullFormattedPhone(state.countryCode, state.phoneNumber)
+        val emailToSend = if (state.step == AuthStep.EMAIL || state.isNewUser) state.email else null
 
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, error = null) }
-            
+
             when (val result = repository.requestOtp(fullPhone, emailToSend)) {
                 is RequestOtpResult.EmailRequired -> {
                     _uiState.update { it.copy(step = AuthStep.EMAIL, isLoading = false) }
@@ -100,13 +81,13 @@ class LoginViewModel @Inject constructor(
 
     fun verifyOtp() {
         val state = _uiState.value
-        if (state.isLoading || state.otp.length < 6) return
+        if (state.isLoading || !PhoneFormatter.isOtpValid(state.otp)) return
 
-        val fullPhone = getFullFormattedPhone()
+        val fullPhone = PhoneFormatter.getFullFormattedPhone(state.countryCode, state.phoneNumber)
 
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, error = null) }
-            
+
             val result = repository.verifyOtp(
                 phone = fullPhone,
                 email = if (state.isNewUser) state.email else null,
@@ -115,11 +96,24 @@ class LoginViewModel @Inject constructor(
             )
 
             if (result.isSuccess) {
+                syncFcmToken()
                 _uiState.update { it.copy(isLoading = false, isSuccess = true) }
             } else {
-                _uiState.update { 
-                    it.copy(isLoading = false, error = result.exceptionOrNull()?.message ?: "Verification failed") 
+                val errorMsg = result.exceptionOrNull()?.message ?: "Verification failed"
+                _uiState.update { it.copy(isLoading = false, error = errorMsg) }
+            }
+        }
+    }
+
+    private fun syncFcmToken() {
+        viewModelScope.launch {
+            try {
+                val fcmToken = fcmTokenProvider.getToken()
+                if (fcmToken != null) {
+                    repository.updateFcmToken(fcmToken)
                 }
+            } catch (e: Exception) {
+                Log.e("LoginViewModel", "Exception while saving FCM token", e)
             }
         }
     }

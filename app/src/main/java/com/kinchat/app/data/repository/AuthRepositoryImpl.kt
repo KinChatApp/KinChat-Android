@@ -1,14 +1,12 @@
-// app/src/main/java/com/kinchat/app/data/repository/AuthRepositoryImpl.kt
-
 package com.kinchat.app.data.repository
 
 import com.kinchat.app.data.remote.api.AuthApi
 import com.kinchat.app.data.remote.model.OtpRequestDto
 import com.kinchat.app.data.remote.model.VerifyOtpRequestDto
+import com.kinchat.app.data.source.auth.DeviceTokenDataSource
+import com.kinchat.app.data.source.auth.SupabaseAuthDataSource
 import com.kinchat.app.domain.repository.AuthRepository
 import com.kinchat.app.domain.repository.RequestOtpResult
-import io.github.jan.supabase.SupabaseClient
-import io.github.jan.supabase.gotrue.auth
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
@@ -17,11 +15,11 @@ import javax.inject.Singleton
 @Singleton
 class AuthRepositoryImpl @Inject constructor(
     private val authApi: AuthApi,
-    private val supabase: SupabaseClient
+    private val supabaseAuthDataSource: SupabaseAuthDataSource,
+    private val deviceTokenDataSource: DeviceTokenDataSource
 ) : AuthRepository {
 
     override suspend fun requestOtp(phone: String, email: String?): RequestOtpResult {
-        // 🚀 API কল ব্যাকগ্রাউন্ড IO থ্রেডে পাঠানো হলো
         return withContext(Dispatchers.IO) {
             try {
                 val response = authApi.requestOtp(OtpRequestDto(phone, email))
@@ -37,7 +35,6 @@ class AuthRepositoryImpl @Inject constructor(
                     RequestOtpResult.Error("Server error: ${response.code()}")
                 }
             } catch (e: Exception) {
-                e.printStackTrace()
                 RequestOtpResult.Error(e.message ?: "Failed to connect to server")
             }
         }
@@ -49,14 +46,13 @@ class AuthRepositoryImpl @Inject constructor(
         otp: String,
         isNewUser: Boolean
     ): Result<Unit> {
-        // 🚀 API কল ব্যাকগ্রাউন্ড IO থ্রেডে পাঠানো হলো
         return withContext(Dispatchers.IO) {
             try {
                 val response = authApi.verifyOtp(VerifyOtpRequestDto(phone, email, otp, isNewUser))
                 val body = response.body()
 
                 if (response.isSuccessful && body?.session != null) {
-                    supabase.auth.importAuthToken(
+                    supabaseAuthDataSource.importAuthToken(
                         accessToken = body.session.accessToken,
                         refreshToken = body.session.refreshToken
                     )
@@ -65,17 +61,23 @@ class AuthRepositoryImpl @Inject constructor(
                     Result.failure(Exception(body?.error ?: "Invalid OTP"))
                 }
             } catch (e: Exception) {
-                e.printStackTrace()
                 Result.failure(e)
             }
         }
     }
 
     override suspend fun logout(): Result<Unit> {
-        // 🚀 API কল ব্যাকগ্রাউন্ড IO থ্রেডে পাঠানো হলো
         return withContext(Dispatchers.IO) {
             try {
-                supabase.auth.signOut()
+                supabaseAuthDataSource.getCurrentUserId()?.let { userId ->
+                    try {
+                        deviceTokenDataSource.clearDeviceTokens(userId)
+                    } catch (e: Exception) {
+                        // Non-fatal, proceed to sign out even if clearing token fails locally
+                    }
+                }
+                
+                supabaseAuthDataSource.signOut()
                 Result.success(Unit)
             } catch (e: Exception) {
                 Result.failure(e)
@@ -83,8 +85,21 @@ class AuthRepositoryImpl @Inject constructor(
         }
     }
 
-    override fun isUserLoggedIn(): Boolean {
-        // এটি সিঙ্ক্রোনাস কাজ, তাই Dispatchers.IO প্রয়োজন নেই
-        return supabase.auth.currentSessionOrNull() != null
+    override suspend fun isUserLoggedIn(): Boolean {
+        return supabaseAuthDataSource.isUserLoggedIn()
+    }
+
+    override suspend fun updateFcmToken(token: String): Result<Unit> {
+        return withContext(Dispatchers.IO) {
+            try {
+                supabaseAuthDataSource.getCurrentUserId()?.let { userId ->
+                    deviceTokenDataSource.clearDeviceTokens(userId)
+                    deviceTokenDataSource.saveDeviceToken(userId, token)
+                }
+                Result.success(Unit)
+            } catch (e: Exception) {
+                Result.failure(e)
+            }
+        }
     }
 }

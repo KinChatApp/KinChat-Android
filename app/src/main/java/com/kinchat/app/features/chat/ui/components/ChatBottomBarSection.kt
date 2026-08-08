@@ -1,5 +1,6 @@
 package com.kinchat.app.features.chat.ui.components
 
+import android.net.Uri
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
@@ -18,6 +19,7 @@ fun ChatBottomBarSection(
     onCopyRequested: () -> Unit,
     onDeleteRequested: () -> Unit,
     onSendMessage: suspend (String) -> Boolean,
+    onMediaSelected: (Uri) -> Unit, // 🚀 FIX: Added callback here
     updateTypingStatus: () -> Unit,
     partnerName: String,
     replyingToMessage: ChatMessage?,
@@ -48,6 +50,7 @@ fun ChatBottomBarSection(
         ) {
             ChatInput(
                 onSendMessage = onSendMessage,
+                onMediaSelected = onMediaSelected, // 🚀 FIX: Passed callback to ChatInput
                 updateTypingStatus = { updateTypingStatus() },
                 partnerName = partnerName,
                 replyingToMessage = replyingToMessage,

@@ -7,10 +7,23 @@ interface ChatRepository {
     // Message Actions
     fun observeMessages(chatId: String): Flow<List<ChatMessage>>
     suspend fun sendMessage(chatId: String, senderId: String, content: String, replyToId: String? = null): Result<Unit>
+    
+    // 🚀 Added for Attachments
+    suspend fun sendAttachmentMessage(
+        chatId: String,
+        senderId: String,
+        localUri: String,
+        mimeType: String,
+        fileName: String,
+        fileSize: Long,
+        fileBytes: ByteArray,
+        replyToId: String? = null
+    ): Result<Unit>
+
     suspend fun editMessage(messageId: String, newContent: String): Result<Unit> // 🚀 Added
     suspend fun deleteMessage(messageId: String, userId: String, deleteType: String): Result<Unit>
     suspend fun addReaction(messageId: String, userId: String, reactionType: String): Result<Unit>
-    
+
     // Check & Status
     suspend fun getPartnerName(chatId: String, currentUserId: String): String?
     suspend fun createChatIfNotExists(partnerUserId: String): Result<String>

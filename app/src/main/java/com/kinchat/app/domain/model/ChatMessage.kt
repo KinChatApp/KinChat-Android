@@ -52,8 +52,13 @@ data class MessageReceipt(
 data class MessageAttachment(
     val id: String? = null,
     @SerialName("message_id") val messageId: String? = null,
-    @SerialName("file_url") val fileUrl: String,
+    @SerialName("file_url") val fileUrl: String? = null, // Nullable for offline first
     @SerialName("file_name") val fileName: String? = null,
     @SerialName("file_size") val fileSize: Long? = null,
-    @SerialName("file_type") val fileType: String? = null
+    @SerialName("file_type") val fileType: String? = null,
+    
+    // Offline-First & ImageKit Support
+    @SerialName("local_uri") val localUri: String? = null,
+    @SerialName("upload_state") val uploadState: String? = null,
+    @SerialName("imagekit_file_id") val imageKitFileId: String? = null
 )

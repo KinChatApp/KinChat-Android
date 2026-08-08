@@ -1,11 +1,16 @@
 package com.kinchat.app.features.chat.viewmodel
 
-import android.util.Log
+import android.content.Context
+import android.net.Uri
+import android.provider.OpenableColumns
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.kinchat.app.core.logging.AppLogger
 import com.kinchat.app.domain.model.ChatMessage
 import com.kinchat.app.domain.repository.ChatRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -16,6 +21,7 @@ import javax.inject.Inject
 
 @HiltViewModel
 class ChatViewModel @Inject constructor(
+    @ApplicationContext private val context: Context, // 🚀 Added Context for URI resolving
     private val chatRepository: ChatRepository,
     private val chatSetupUseCase: ChatSetupUseCase
 ) : ViewModel() {
@@ -38,7 +44,7 @@ class ChatViewModel @Inject constructor(
     private var currentChatId: String? = null
     var currentUserId: String = ""
         private set
-        
+
     private var chatObservingJob: Job? = null
 
     fun toggleSelection(messageId: String) {
@@ -52,6 +58,7 @@ class ChatViewModel @Inject constructor(
     }
 
     fun initializeChat(passedId: String) {
+        AppLogger.i("ChatVM", "Initializing chat flow for passedId: $passedId")
         chatObservingJob?.cancel()
 
         chatObservingJob = viewModelScope.launch {
@@ -63,16 +70,16 @@ class ChatViewModel @Inject constructor(
             }
             _messages.value = emptyList()
 
-            // 🚀 চ্যাট সেটআপের জটিল লজিক UseCase এর মাধ্যমে হ্যান্ডেল করা হচ্ছে
             val setupResult = chatSetupUseCase.execute(passedId, quickName)
 
             if (setupResult != null) {
                 currentUserId = setupResult.currentUserId
                 currentChatId = setupResult.actualChatId
+                AppLogger.d("ChatVM", "Chat setup complete. actualChatId: $currentChatId, currentUserId: $currentUserId")
 
                 if (setupResult.partnerName != null) {
                     _partnerState.value = PartnerUiState.Success(
-                        id = setupResult.partnerId.ifEmpty { setupResult.actualChatId },
+                        id = setupResult.partnerId.ifEmpty { passedId },
                         name = setupResult.partnerName
                     )
                 } else {
@@ -89,41 +96,103 @@ class ChatViewModel @Inject constructor(
                         }
                     }
                 } catch (e: Exception) {
-                    Log.e("ChatDebug", "Error observing messages: ${e.message}")
+                    AppLogger.e("ChatVM", "Error observing messages for ${setupResult.actualChatId}", e)
                 }
-            } else if (quickName.isNullOrBlank()) {
-                _partnerState.value = PartnerUiState.Error
+            } else {
+                AppLogger.w("ChatVM", "Chat Setup Failed! Result is null.")
+                if (quickName.isNullOrBlank()) {
+                    _partnerState.value = PartnerUiState.Error
+                }
             }
         }
     }
 
     suspend fun sendMessage(content: String, replyToId: String? = null): SendMessageResult {
+        AppLogger.i("ChatVM", "UI Request: Sending new message")
         val chatId = currentChatId
-            ?: return SendMessageResult.Failure("চ্যাট এখনো লোড হয়নি, একটু অপেক্ষা করে আবার চেষ্টা করুন")
+
+        if (chatId == null) {
+            AppLogger.w("ChatVM", "SendMessage Failed: currentChatId is null")
+            return SendMessageResult.Failure("চ্যাট এখনো লোড হয়নি, একটু অপেক্ষা করে আবার চেষ্টা করুন")
+        }
 
         if (currentUserId.isEmpty()) {
+            AppLogger.w("ChatVM", "SendMessage Failed: currentUserId is empty")
             return SendMessageResult.Failure("ইউজার লগইন স্ট্যাটাস পাওয়া যায়নি, একটু অপেক্ষা করে আবার চেষ্টা করুন")
         }
 
         val result = chatRepository.sendMessage(chatId, currentUserId, content, replyToId)
 
         return if (result.isSuccess) {
+            AppLogger.i("ChatVM", "✅ SendMessage UI Result: Success")
             SendMessageResult.Success
         } else {
-            val rawMessage = result.exceptionOrNull()?.message ?: "অজানা সমস্যা"
+            val ex = result.exceptionOrNull()
+            val rawMessage = ex?.message ?: "অজানা সমস্যা"
             val cleanMessage = rawMessage.substringBefore("URL:").trim().ifBlank {
                 rawMessage.take(300)
             }
-            Log.e("ChatDebug", "sendMessage failed: $rawMessage", result.exceptionOrNull())
+            AppLogger.e("ChatVM", "❌ sendMessage UI Result: Failed - $rawMessage", ex)
             SendMessageResult.Failure(cleanMessage)
+        }
+    }
+
+    // 🚀 New function to process and send Media/Attachments
+    fun sendAttachment(uri: Uri, replyToId: String? = null) {
+        val chatId = currentChatId ?: return
+        if (currentUserId.isEmpty()) return
+
+        AppLogger.i("ChatVM", "UI Request: Processing attachment $uri")
+
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val contentResolver = context.contentResolver
+                val mimeType = contentResolver.getType(uri) ?: "application/octet-stream"
+                var fileName = "attachment_${System.currentTimeMillis()}"
+                var fileSize = 0L
+
+                // Extract File Metadata (Name & Size)
+                contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                    val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                    val sizeIndex = cursor.getColumnIndex(OpenableColumns.SIZE)
+                    if (cursor.moveToFirst()) {
+                        if (nameIndex != -1) fileName = cursor.getString(nameIndex)
+                        if (sizeIndex != -1) fileSize = cursor.getLong(sizeIndex)
+                    }
+                }
+
+                // Read File Bytes
+                val fileBytes = contentResolver.openInputStream(uri)?.use { it.readBytes() }
+
+                if (fileBytes != null) {
+                    chatRepository.sendAttachmentMessage(
+                        chatId = chatId,
+                        senderId = currentUserId,
+                        localUri = uri.toString(),
+                        mimeType = mimeType,
+                        fileName = fileName,
+                        fileSize = fileSize,
+                        fileBytes = fileBytes,
+                        replyToId = replyToId
+                    )
+                } else {
+                    AppLogger.e("ChatVM", "Failed to read file bytes from URI")
+                }
+            } catch (e: Exception) {
+                AppLogger.e("ChatVM", "Error processing attachment", e)
+            }
         }
     }
 
     fun editMessage(messageId: String, newContent: String) {
         if (currentUserId.isEmpty()) return
+        AppLogger.d("ChatVM", "UI Request: Edit message $messageId")
         viewModelScope.launch {
-            try { chatRepository.editMessage(messageId, newContent) }
-            catch (e: Exception) { Log.e("ChatDebug", "Error editing: ${e.message}") }
+            try {
+                chatRepository.editMessage(messageId, newContent)
+            } catch (e: Exception) {
+                AppLogger.e("ChatVM", "Error editing message from UI", e)
+            }
         }
     }
 
@@ -134,6 +203,7 @@ class ChatViewModel @Inject constructor(
 
     fun deleteSelectedMessages(type: String = "for_me") {
         if (currentUserId.isEmpty() || _selectedMessages.value.isEmpty()) return
+        AppLogger.d("ChatVM", "UI Request: Delete selected messages (${_selectedMessages.value.size}), type: $type")
         viewModelScope.launch {
             _selectedMessages.value.forEach { msgId ->
                 chatRepository.deleteMessage(msgId, currentUserId, type)
@@ -144,6 +214,7 @@ class ChatViewModel @Inject constructor(
 
     fun addReaction(messageId: String, reactionType: String) {
         if (currentUserId.isEmpty()) return
+        AppLogger.d("ChatVM", "UI Request: Add reaction $reactionType to $messageId")
         viewModelScope.launch { chatRepository.addReaction(messageId, currentUserId, reactionType) }
     }
 

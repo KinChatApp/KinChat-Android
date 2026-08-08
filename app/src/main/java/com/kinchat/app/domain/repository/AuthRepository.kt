@@ -10,5 +10,10 @@ interface AuthRepository {
     suspend fun requestOtp(phone: String, email: String? = null): RequestOtpResult
     suspend fun verifyOtp(phone: String, email: String?, otp: String, isNewUser: Boolean): Result<Unit>
     suspend fun logout(): Result<Unit>
-    fun isUserLoggedIn(): Boolean
+    
+    // 🚀 Updated: Made it a suspend function for offline support
+    suspend fun isUserLoggedIn(): Boolean
+
+    // 🚀 FCM Token আপডেট করার মেথড
+    suspend fun updateFcmToken(token: String): Result<Unit>
 }

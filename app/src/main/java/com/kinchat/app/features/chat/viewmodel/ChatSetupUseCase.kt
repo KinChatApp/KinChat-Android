@@ -4,16 +4,13 @@ import com.kinchat.app.domain.repository.ChatRepository
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.gotrue.auth
 import io.github.jan.supabase.postgrest.postgrest
+import io.github.jan.supabase.postgrest.rpc
 import kotlinx.coroutines.delay
 import kotlinx.serialization.Serializable
-import java.util.UUID
 import javax.inject.Inject
 
 @Serializable
 private data class ParticipantDto(val chat_id: String? = null, val user_id: String)
-
-@Serializable
-private data class ChatDto(val id: String)
 
 data class ChatSetupResult(
     val actualChatId: String,
@@ -31,7 +28,7 @@ class ChatSetupUseCase @Inject constructor(
     suspend fun execute(passedId: String, quickName: String?): ChatSetupResult? {
         var user = supabaseClient.auth.currentUserOrNull()
         var retryCount = 0
-        
+
         while (user == null && retryCount < 5) {
             delay(300)
             user = supabaseClient.auth.currentUserOrNull()
@@ -42,40 +39,48 @@ class ChatSetupUseCase @Inject constructor(
         if (passedId.isEmpty()) return null
 
         var actualChatId = passedId
-        var partnerName = quickName ?: chatRepository.getPartnerName(actualChatId, currentUserId)
         var partnerId = ""
+        var partnerName = quickName
 
-        if (passedId == AI_BOT_ID || partnerName == null) {
+        if (passedId == AI_BOT_ID) {
+            partnerId = AI_BOT_ID
+            partnerName = "TukTak AI"
+        } else {
             try {
-                if (passedId == AI_BOT_ID) {
-                    partnerId = AI_BOT_ID
-                    partnerName = "TukTak AI"
-                }
-                
-                val myChats = supabaseClient.postgrest["chat_participants"]
-                    .select { filter { eq("user_id", currentUserId) } }
-                    .decodeList<ParticipantDto>().mapNotNull { it.chat_id }
+                // Check if passedId is a Chat ID
+                val participants = supabaseClient.postgrest["chat_participants"]
+                    .select { filter { eq("chat_id", passedId) } }
+                    .decodeList<ParticipantDto>()
 
-                val partnerChats = supabaseClient.postgrest["chat_participants"]
-                    .select { filter { eq("user_id", partnerId) } }
-                    .decodeList<ParticipantDto>().mapNotNull { it.chat_id }
-
-                val sharedChatId = myChats.intersect(partnerChats.toSet()).firstOrNull()
-
-                if (sharedChatId != null) {
-                    actualChatId = sharedChatId
-                    partnerName = partnerName ?: chatRepository.getPartnerName(actualChatId, currentUserId)
+                if (participants.isNotEmpty()) {
+                    actualChatId = passedId
+                    partnerId = participants.firstOrNull { it.user_id != currentUserId }?.user_id ?: ""
                 } else {
-                    val newChatId = UUID.randomUUID().toString()
-                    supabaseClient.postgrest["chats"].insert(ChatDto(id = newChatId))
-                    supabaseClient.postgrest["chat_participants"].insert(listOf(
-                        ParticipantDto(chat_id = newChatId, user_id = currentUserId),
-                        ParticipantDto(chat_id = newChatId, user_id = partnerId)
-                    ))
-                    actualChatId = newChatId
+                    // Treat passedId as User ID
+                    partnerId = passedId
+
+                    // 🚀 FIXED: আগে এখানে "chats" আর "chat_participants"-এ আলাদা আলাদা manual insert
+                    // করা হতো। এটা silently fail করলে actualChatId কখনো আপডেট হতো না — ফলে partner-এর
+                    // user_id-কেই ভুলভাবে chat_id হিসেবে ব্যবহার হয়ে যেত (মূল বাগ)। এখন একই নির্ভরযোগ্য
+                    // RPC ব্যবহার করা হচ্ছে যেটা ContactsViewModel.openChatWithUser()-এও কাজ করছে —
+                    // এটা reliably দুইজনের chat + participants রো একসাথে তৈরি করে।
+                    val response = supabaseClient.postgrest.rpc(
+                        "create_chat_if_not_exists",
+                        mapOf("user1_id" to currentUserId, "user2_id" to partnerId)
+                    ).decodeAs<String>()
+
+                    actualChatId = response.replace("\"", "")
                 }
+
+                if (partnerName.isNullOrEmpty()) {
+                    partnerName = chatRepository.getPartnerName(actualChatId, currentUserId)
+                }
+
             } catch (e: Exception) {
-                if (passedId == AI_BOT_ID) partnerName = "TukTak AI"
+                e.printStackTrace()
+                // 🚀 FIXED: আগে এই catch ব্লকের পরও পুরনো (ভুল) actualChatId নিয়ে ফাংশন রিটার্ন করত।
+                // এখন fail হলে null রিটার্ন করা হচ্ছে, যেন কখনো ভুল chat_id দিয়ে চ্যাট শুরু না হয়।
+                return null
             }
         }
 

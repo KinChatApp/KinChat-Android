@@ -11,16 +11,15 @@ import kotlinx.serialization.json.Json
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * Android equivalent of userStorage.ts
- * Uses DataStore instead of synchronous localStorage for better performance and thread safety.
- */
 @Singleton
 class UserPreferencesManager @Inject constructor(
     private val dataStore: DataStore<Preferences>
 ) {
     private val contactCacheKey = stringPreferencesKey("kinchat_contact_cache")
     private val avatarCacheKey = stringPreferencesKey("kinchat_my_avatar")
+    
+    // 🚀 FCM Token সেভ রাখার জন্য নতুন Key
+    private val fcmTokenKey = stringPreferencesKey("kinchat_fcm_token")
 
     // Get a single contact name by ID as a Flow
     fun getContactName(userId: String): Flow<String?> {
@@ -79,6 +78,20 @@ class UserPreferencesManager @Inject constructor(
     suspend fun setMyAvatar(avatarUrl: String) {
         dataStore.edit { preferences ->
             preferences[avatarCacheKey] = avatarUrl
+        }
+    }
+
+    // 🚀 Get FCM Token
+    fun getFcmToken(): Flow<String?> {
+        return dataStore.data.map { preferences ->
+            preferences[fcmTokenKey]
+        }
+    }
+
+    // 🚀 Set FCM Token
+    suspend fun setFcmToken(token: String) {
+        dataStore.edit { preferences ->
+            preferences[fcmTokenKey] = token
         }
     }
 }

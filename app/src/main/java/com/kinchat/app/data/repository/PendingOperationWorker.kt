@@ -5,14 +5,13 @@ import android.util.Log
 import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
-import com.kinchat.app.data.local.db.ChatMessageDao
-import com.kinchat.app.data.local.db.MessageStatus
-import com.kinchat.app.data.local.db.OperationType
+import com.kinchat.app.core.utils.DebugLogger
 import com.kinchat.app.data.local.db.PendingOperationDao
+import com.kinchat.app.data.repository.sync.handlers.PendingOperationDispatcher
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import io.github.jan.supabase.SupabaseClient
-import io.github.jan.supabase.postgrest.postgrest
+import io.github.jan.supabase.gotrue.auth
 
 @HiltWorker
 class PendingOperationWorker @AssistedInject constructor(
@@ -20,66 +19,61 @@ class PendingOperationWorker @AssistedInject constructor(
     @Assisted params: WorkerParameters,
     private val supabaseClient: SupabaseClient,
     private val pendingOperationDao: PendingOperationDao,
-    private val chatMessageDao: ChatMessageDao
+    private val operationDispatcher: PendingOperationDispatcher
 ) : CoroutineWorker(context, params) {
+
+    private val currentUserId: String?
+        get() = supabaseClient.auth.currentUserOrNull()?.id
 
     override suspend fun doWork(): Result {
         val pendingOps = pendingOperationDao.getAllPendingOperations()
+        DebugLogger.log(
+            applicationContext, 
+            "PendingWorker", 
+            "doWork triggered, pendingOps=${pendingOps.size}, currentUserId=$currentUserId"
+        )
+        
         if (pendingOps.isEmpty()) return Result.success()
-
+        
         var hasFailure = false
-
+        
         for (op in pendingOps) {
             try {
-                when (op.type) {
-                    OperationType.SEND_MESSAGE -> {
-                        // 🚀 FIXED: লোকাল ডিবি থেকে মেসেজ এনে Supabase-এ ইনসার্ট করা হচ্ছে
-                        val message = chatMessageDao.getMessageById(op.referenceId)
-                        if (message != null) {
-                            val messageDto = mapOf(
-                                "id" to message.id,
-                                "chat_id" to message.chatId,
-                                "sender_id" to message.senderId,
-                                "content" to message.content,
-                                "type" to message.type.name
-                            )
-                            supabaseClient.postgrest["messages"].insert(messageDto)
-                            chatMessageDao.updateMessageStatus(op.referenceId, MessageStatus.SENT)
-                        }
-                        pendingOperationDao.deleteOperation(op.id)
-                    }
-                    OperationType.EDIT_MESSAGE -> {
-                        val newContent = op.payloadJson
-                        if (newContent != null) {
-                            supabaseClient.postgrest["messages"]
-                                .update(mapOf("content" to newContent, "edited_at" to java.time.Instant.now().toString())) {
-                                    filter { eq("id", op.referenceId) }
-                                }
-                        }
-                        pendingOperationDao.deleteOperation(op.id)
-                    }
-                    OperationType.DELETE_MESSAGE -> {
-                        supabaseClient.postgrest["messages"]
-                            .update(mapOf("deleted_at" to java.time.Instant.now().toString())) {
-                                filter { eq("id", op.referenceId) }
-                            }
-                        pendingOperationDao.deleteOperation(op.id)
-                    }
-                    OperationType.ADD_REACTION -> {
-                        pendingOperationDao.deleteOperation(op.id)
-                    }
-                    else -> {
-                        pendingOperationDao.deleteOperation(op.id)
-                    }
-                }
+                // Dispatch the operation to the appropriate dedicated handler
+                operationDispatcher.dispatch(op)
+                
+                // If operation was handled successfully, remove it from the pending queue
+                pendingOperationDao.deleteOperation(op.id)
+                
             } catch (e: Exception) {
-                Log.e("PendingWorker", "Sync Failed: ${e.message}")
-                hasFailure = true
-                val updatedOp = op.incrementRetryCount()
-                pendingOperationDao.updateOperation(updatedOp)
+                val errorMsg = e.message ?: ""
+                Log.e("PendingWorker", "Sync Failed: $errorMsg")
+                DebugLogger.log(
+                    applicationContext,
+                    "PendingWorker",
+                    "Sync Failed on type=${op.type} ref=${op.referenceId} retryCount=${op.retryCount}: $errorMsg",
+                    e
+                )
+
+                if (errorMsg.contains("invalid input syntax for type uuid")) {
+                    // Unrecoverable UUID format error; discard the operation
+                    pendingOperationDao.deleteOperation(op.id)
+                } else {
+                    // Recoverable error, increment retry count and mark for retry
+                    hasFailure = true
+                    val updatedOp = op.incrementRetryCount()
+                    pendingOperationDao.updateOperation(updatedOp)
+                }
             }
         }
 
-        return if (hasFailure) Result.retry() else Result.success()
+        val finalResult = if (hasFailure) Result.retry() else Result.success()
+        DebugLogger.log(
+            applicationContext, 
+            "PendingWorker", 
+            "doWork finished: ${if (hasFailure) "RETRY" else "SUCCESS"}"
+        )
+        
+        return finalResult
     }
 }

@@ -5,33 +5,26 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
-
     <uses-permission android:name="android.permission.READ_CONTACTS" />
-
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
-
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
     <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
     <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="29" />
-
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
 
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_PHONE_CALL" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <!-- 🚀 নতুন: battery optimization exemption রিকোয়েস্ট করার জন্য -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
-    <uses-feature android:name="android.hardware.camera" android:required="false" />
-    <uses-feature android:name="android.hardware.camera.front" android:required="false" />
-    <uses-feature android:name="android.hardware.microphone" android:required="false" />
+    <!-- Android 14+ Foreground Service -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
 
     <application
         android:name=".KinChatApplication"
@@ -46,7 +39,6 @@
         android:enableOnBackInvokedCallback="true"
         tools:targetApi="34">
 
-        <!-- 🚀 Fixed: Hilt-কে ব্যাকগ্রাউন্ডে কাজ করতে দেওয়ার জন্য ডিফল্ট WorkManager বন্ধ করা হলো -->
         <provider
             android:name="androidx.startup.InitializationProvider"
             android:authorities="${applicationId}.androidx-startup"
@@ -61,6 +53,7 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:launchMode="singleTask"
             android:theme="@style/Theme.Tuktak"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
@@ -70,14 +63,21 @@
         </activity>
 
         <service
-            android:name="com.itsaky.androidide.logsender.LogSenderService"
-            android:foregroundServiceType="dataSync"
-            android:exported="false"
-            tools:replace="android:exported">
+            android:name=".core.services.KinChatMessagingService"
+            android:exported="true">
             <intent-filter>
-                <action android:name="ide.logsender.service.start" />
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
             </intent-filter>
         </service>
+
+        <receiver
+            android:name=".core.receivers.NotificationActionReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.kinchat.app.ACTION_REPLY" />
+                <action android:name="com.kinchat.app.ACTION_MARK_READ" />
+            </intent-filter>
+        </receiver>
 
     </application>
 

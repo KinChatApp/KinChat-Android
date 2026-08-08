@@ -164,6 +164,12 @@ fun ChatScreen(
                         }
                     }
                 },
+                onMediaSelected = { uri -> 
+                    // 🚀 FIX: Passed media URI to ViewModel with reply support
+                    val replyId = replyingTo?.id
+                    replyingTo = null // Clear reply state after sending
+                    viewModel.sendAttachment(uri, replyId) 
+                },
                 updateTypingStatus = {},
                 partnerName = displayName,
                 replyingToMessage = replyingTo,
