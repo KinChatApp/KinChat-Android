@@ -28,7 +28,7 @@ object MessageUiMapper {
         val type = MessageType.from(entity.type ?: "text")
 
         return MessageUiModel(
-            id = entity.id ?: "", // Added ?: "" fallback
+            id = entity.id ?: "",
             content = entity.content ?: "",
             rawTimestamp = parseTimestamp(entity.createdAt),
             formattedTime = formatTime(entity.createdAt),
@@ -79,9 +79,15 @@ object MessageUiMapper {
 
     private fun mapMediaState(entity: ChatMessage): MediaUiState? {
         val attachment = entity.attachments?.firstOrNull() ?: return null
+        
+        // FIX: Handle literal "null" strings as well as empty strings
+        val mediaUrl = attachment.fileUrl?.takeIf { it.isNotBlank() && it != "null" } 
+            ?: attachment.localUri?.takeIf { it.isNotBlank() && it != "null" } 
+            ?: ""
+
         return MediaUiState(
-            url = attachment.fileUrl ?: "", // FIX: Added fallback to empty string
-            fileName = attachment.fileName ?: "", // FIX: Added fallback to empty string
+            url = mediaUrl,
+            fileName = attachment.fileName ?: "",
             rawSizeBytes = attachment.fileSize,
             formattedSize = FileFormatter.formatSize(attachment.fileSize ?: 0L)
         )
@@ -90,7 +96,12 @@ object MessageUiMapper {
     private fun mapAudioState(entity: ChatMessage): AudioUiState? {
         if (entity.type != "audio") return null
         val duration = entity.metadata?.get("duration")?.jsonPrimitive?.intOrNull ?: 0
-        val url = entity.attachments?.firstOrNull()?.fileUrl ?: return null
+        
+        val attachment = entity.attachments?.firstOrNull()
+        val url = attachment?.fileUrl?.takeIf { it.isNotBlank() && it != "null" } 
+            ?: attachment?.localUri?.takeIf { it.isNotBlank() && it != "null" } 
+            ?: return null
+        
         return AudioUiState(url = url, durationSeconds = duration)
     }
 
@@ -167,7 +178,7 @@ object MessageUiMapper {
         return reactions.groupBy { it.reaction }
             .map { (typeStr, list) ->
                 ReactionUiState(
-                    type = ReactionType.from(typeStr ?: ""), 
+                    type = ReactionType.from(typeStr ?: ""),
                     count = list.size,
                     isSelectedByMe = list.any { it.userId == currentUserId }
                 )

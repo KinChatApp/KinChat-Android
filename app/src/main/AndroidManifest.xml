@@ -63,7 +63,7 @@
         </activity>
 
         <service
-            android:name=".core.services.KinChatMessagingService"
+            android:name=".core.notifications.fcm.KinChatMessagingService"
             android:exported="true">
             <intent-filter>
                 <action android:name="com.google.firebase.MESSAGING_EVENT" />
@@ -71,7 +71,7 @@
         </service>
 
         <receiver
-            android:name=".core.receivers.NotificationActionReceiver"
+            android:name=".core.notifications.actions.NotificationActionReceiver"
             android:exported="false">
             <intent-filter>
                 <action android:name="com.kinchat.app.ACTION_REPLY" />

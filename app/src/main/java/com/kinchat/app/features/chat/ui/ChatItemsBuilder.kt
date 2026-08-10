@@ -29,12 +29,12 @@ object ChatItemsBuilder {
                 partnerName = partnerName,
                 isTopInGroup = !(prev != null && prev.senderId == msg.senderId && localDateOf(prev.createdAt) == msgDate),
                 showTail = !(next != null && next.senderId == msg.senderId && localDateOf(next.createdAt) == msgDate),
-                // 🚀 FIX: ফাঁকা স্ট্রিং বা "null" টেক্সট ফিল্টার করে বাদ দেওয়া হলো
                 replyMessage = msg.replyToId?.takeIf { it.isNotBlank() && it != "null" }
                     ?.let { replyId -> messages.find { it.id == replyId } }
             )
             result.add(ChatListItem.Msg(uiModel))
         }
-        return result.reversed()
+
+        return result
     }
 }

@@ -23,16 +23,16 @@ fun ChatInsightsEntity.toDomain(): ChatInsights {
         mostActiveDay = this.mostActiveDay,
         mostActiveHour = this.mostActiveHour,
         currentUserStats = ChatStats(
-            totalMessages = this.myMessages,
-            totalWords = this.myWords,
-            totalChars = this.myChars,
-            longestMessageLength = this.myLongest
+            messages = this.myMessages,
+            words = this.myWords,
+            chars = this.myChars,
+            longest = this.myLongest
         ),
         friendStats = ChatStats(
-            totalMessages = this.friendMessages,
-            totalWords = this.friendWords,
-            totalChars = this.friendChars,
-            longestMessageLength = this.friendLongest
+            messages = this.friendMessages,
+            words = this.friendWords,
+            chars = this.friendChars,
+            longest = this.friendLongest
         ),
         mediaStats = MediaStats(
             myImages = this.myImages,
@@ -49,14 +49,14 @@ fun ChatInsightsEntity.toDomain(): ChatInsights {
             friendAudioCalls = this.friendAudioCalls,
             myVideoCalls = this.myVideoCalls,
             friendVideoCalls = this.friendVideoCalls,
-            myDuration = this.myCallDuration,
-            friendDuration = this.friendCallDuration,
+            myCallDuration = this.myCallDuration,
+            friendCallDuration = this.friendCallDuration,
             myReactions = this.myReactions,
             friendReactions = this.friendReactions,
             myLinks = this.myLinks,
             friendLinks = this.friendLinks,
-            myBytes = this.myDataShared,
-            friendBytes = this.friendDataShared,
+            myDataShared = this.myDataShared,
+            friendDataShared = this.friendDataShared,
             topReaction = this.topReaction
         )
     )

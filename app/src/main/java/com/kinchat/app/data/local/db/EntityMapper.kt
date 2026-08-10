@@ -21,8 +21,8 @@ fun MessageWithDetails.toDomainModel(): ChatMessage {
         isForwarded = this.message.isForwarded,
         forwardedFromId = this.message.forwardedFromId,
         replyToId = this.message.replyToId,
-        metadata = this.message.metadataJson?.let { 
-            try { Json.decodeFromString<JsonObject>(it) } catch (e: Exception) { null } 
+        metadata = this.message.metadataJson?.let {
+            try { Json.decodeFromString<JsonObject>(it) } catch (e: Exception) { null }
         },
         messageReactions = this.reactions.map { reaction ->
             MessageReaction(
@@ -35,20 +35,22 @@ fun MessageWithDetails.toDomainModel(): ChatMessage {
             MessageAttachment(
                 id = attachment.id,
                 messageId = attachment.messageId,
-                fileUrl = attachment.fileUrl ?: attachment.localUri ?: "",
+                fileUrl = attachment.fileUrl,
                 fileName = attachment.fileName,
                 fileSize = attachment.fileSize,
-                fileType = attachment.mimeType
+                fileType = attachment.mimeType,
+                localUri = attachment.localUri, 
+                uploadState = attachment.uploadState.name,
+                imageKitFileId = attachment.imageKitFileId
             )
         },
         isSending = this.message.status == MessageStatus.PENDING || this.message.status == MessageStatus.SENDING
     )
 }
 
-// 🚀 Dashboard-এর জন্য ম্যাপিং
 fun ChatPreview.toDomainModel(currentUserId: String): Chat {
     val participantInfo = this.participants.firstOrNull { it.userId == currentUserId }
-    
+
     return Chat(
         id = this.chat.id,
         name = this.chat.title ?: "Unknown",
@@ -57,7 +59,7 @@ fun ChatPreview.toDomainModel(currentUserId: String): Chat {
         unreadCount = participantInfo?.unreadCount ?: 0,
         avatarUrl = this.chat.avatarUrl,
         isPinned = participantInfo?.isPinned ?: false,
-        isFavorite = false, 
+        isFavorite = false,
         isArchived = participantInfo?.isArchived ?: false,
         isMuted = participantInfo?.isMuted ?: false,
         isBlocked = false

@@ -52,12 +52,16 @@ fun ChatMessageList(
     LazyColumn(
         state = listState,
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(top = 12.dp, bottom = 12.dp),
-        reverseLayout = true
+        contentPadding = PaddingValues(top = 12.dp, bottom = 12.dp)
     ) {
         items(
             items = chatItems,
-            key = { if (it is ChatListItem.Msg) it.uiModel.id else "header_${(it as ChatListItem.Header).date}" }
+            key = {
+                when (it) {
+                    is ChatListItem.Msg -> it.uiModel.id
+                    is ChatListItem.Header -> "header_${it.date}"
+                }
+            }
         ) { item ->
             when (item) {
                 is ChatListItem.Header -> DateSeparator(item.label)

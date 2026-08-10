@@ -1,7 +1,9 @@
 package com.kinchat.app.di
 
-import android.content.Context
+import com.kinchat.app.core.utils.PhoneNumberSanitizer
 import com.kinchat.app.data.repository.ContactsRepositoryImpl
+import com.kinchat.app.data.source.contacts.LocalContactsDataSource
+import com.kinchat.app.data.source.contacts.RemoteContactsDataSource
 import com.kinchat.app.domain.repository.ContactsRepository
 import com.kinchat.app.domain.usecase.ContactsUseCases
 import com.kinchat.app.domain.usecase.GetContactsUseCase
@@ -10,9 +12,7 @@ import com.kinchat.app.domain.usecase.SyncDeviceContactsUseCase
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
-import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
-import io.github.jan.supabase.SupabaseClient
 import javax.inject.Singleton
 
 @Module
@@ -22,10 +22,15 @@ object ContactsModule {
     @Provides
     @Singleton
     fun provideContactsRepository(
-        supabase: SupabaseClient,
-        @ApplicationContext context: Context
+        localDataSource: LocalContactsDataSource,
+        remoteDataSource: RemoteContactsDataSource,
+        phoneSanitizer: PhoneNumberSanitizer
     ): ContactsRepository {
-        return ContactsRepositoryImpl(supabase, context)
+        return ContactsRepositoryImpl(
+            localDataSource = localDataSource,
+            remoteDataSource = remoteDataSource,
+            phoneSanitizer = phoneSanitizer
+        )
     }
 
     @Provides

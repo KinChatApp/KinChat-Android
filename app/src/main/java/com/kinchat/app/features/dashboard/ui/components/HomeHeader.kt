@@ -24,8 +24,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.kinchat.app.ui.theme.BrandPrimary
-import com.kinchat.app.ui.theme.ForegroundLight
+import com.kinchat.app.core.designsystem.BrandPrimary
+import com.kinchat.app.core.designsystem.ForegroundLight
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

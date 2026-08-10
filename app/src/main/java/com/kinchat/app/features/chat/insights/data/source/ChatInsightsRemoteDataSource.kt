@@ -23,10 +23,10 @@ class ChatInsightsRemoteDataSource @Inject constructor(
         return supabase.auth.currentUserOrNull()?.id
     }
 
-    suspend fun fetchChatInsightsData(meId: String, friendId: String): ChatInsightsRawData? = coroutineScope {
+    internal suspend fun fetchChatInsightsData(meId: String, friendId: String): ChatInsightsRawData? = coroutineScope {
         val previews = supabase.postgrest.rpc("get_user_chat_previews", mapOf("current_user_id" to meId))
             .decodeList<ChatPreviewDto>()
-            
+
         val chatPreview = previews.find { it.otherUserId == friendId } ?: return@coroutineScope null
         val chatId = chatPreview.chatId
         val friendName = chatPreview.otherUserName ?: "Friend"

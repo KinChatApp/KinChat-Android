@@ -1,6 +1,6 @@
 package com.kinchat.app.di
 
-import com.kinchat.app.data.repository.ChatRepositoryImpl
+import com.kinchat.app.data.repository.chat.ChatRepositoryImpl
 import com.kinchat.app.domain.repository.ChatRepository
 import dagger.Binds
 import dagger.Module

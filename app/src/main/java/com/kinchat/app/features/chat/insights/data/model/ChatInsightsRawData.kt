@@ -1,6 +1,6 @@
 package com.kinchat.app.features.chat.insights.data.model
 
-data class ChatInsightsRawData(
+internal data class ChatInsightsRawData(
     val chatId: String,
     val friendName: String,
     val firstMessage: MessageDto?,

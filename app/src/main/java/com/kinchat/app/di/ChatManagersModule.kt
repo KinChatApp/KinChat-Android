@@ -1,7 +1,9 @@
 package com.kinchat.app.di
 
 import com.kinchat.app.data.local.db.*
-import com.kinchat.app.data.repository.*
+import com.kinchat.app.data.repository.chat.*
+import com.kinchat.app.data.repository.chat.settings.*
+import com.kinchat.app.data.repository.chat.sync.*
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn

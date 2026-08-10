@@ -7,7 +7,7 @@ import javax.inject.Inject
 
 class ChatInsightsEntityFactory @Inject constructor() {
 
-    fun createEntity(
+    internal fun createEntity(
         meId: String,
         friendId: String,
         rawData: ChatInsightsRawData
@@ -39,17 +39,14 @@ class ChatInsightsEntityFactory @Inject constructor() {
             firstMessageSender = firstMessageSender,
             mostActiveDay = mostActiveDay,
             mostActiveHour = mostActiveHour,
-            
             myMessages = myStatsRaw?.totalMessages ?: 0,
             myWords = myStatsRaw?.totalWords ?: 0,
             myChars = myStatsRaw?.totalChars ?: 0,
             myLongest = myStatsRaw?.longestMessageLength ?: 0,
-            
             friendMessages = friendStatsRaw?.totalMessages ?: 0,
             friendWords = friendStatsRaw?.totalWords ?: 0,
             friendChars = friendStatsRaw?.totalChars ?: 0,
             friendLongest = friendStatsRaw?.longestMessageLength ?: 0,
-            
             myImages = extStats.myImages,
             friendImages = extStats.friendImages,
             myVideos = extStats.myVideos,
@@ -58,7 +55,6 @@ class ChatInsightsEntityFactory @Inject constructor() {
             friendAudioMedia = extStats.friendAudio,
             myDocuments = extStats.myDocs,
             friendDocuments = extStats.friendDocs,
-            
             myAudioCalls = extStats.myAudioCalls,
             friendAudioCalls = extStats.friendAudioCalls,
             myVideoCalls = extStats.myVideoCalls,
@@ -72,7 +68,6 @@ class ChatInsightsEntityFactory @Inject constructor() {
             myDataShared = extStats.myBytes,
             friendDataShared = extStats.friendBytes,
             topReaction = extStats.topReaction,
-            
             lastCalculatedAt = System.currentTimeMillis(),
             isSynced = true
         )

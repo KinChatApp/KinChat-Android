@@ -60,11 +60,16 @@ fun MessageContent(
     }
 
     val content = message.content ?: ""
+    
+    // FIX: Extract URL from attachments first, fallback to content
+    val mediaUrl = message.attachments?.firstOrNull()?.let { attachment ->
+        attachment.fileUrl?.takeIf { it.isNotBlank() } ?: attachment.localUri
+    } ?: content
 
     when (message.type) {
         "image" -> {
             MediaMessage(
-                url = content,
+                url = mediaUrl,
                 isVideo = false,
                 isSending = message.isSending,
                 onClick = onMediaClick
@@ -72,7 +77,7 @@ fun MessageContent(
         }
         "video" -> {
             MediaMessage(
-                url = content,
+                url = mediaUrl,
                 isVideo = true,
                 isSending = message.isSending,
                 onClick = onMediaClick
@@ -80,13 +85,12 @@ fun MessageContent(
         }
         "audio" -> {
             AudioMessagePlayer(
-                url = content,
+                url = mediaUrl,
                 isMe = isMe,
                 isSending = message.isSending
             )
         }
         "file", "document" -> {
-            // 🚀 ফিক্স: JsonElement থেকে String বের করতে .jsonPrimitive.content ব্যবহার করা হলো
             val fileName = message.metadata?.get("file_name")?.jsonPrimitive?.content
                 ?: message.metadata?.get("fileName")?.jsonPrimitive?.content
                 ?: "Document_File.pdf"
@@ -96,7 +100,7 @@ fun MessageContent(
                 isSending = message.isSending,
                 isMe = isMe,
                 onDownload = {
-                    MediaDownloader.downloadMedia(context, content, message.type ?: "document", fileName)
+                    MediaDownloader.downloadMedia(context, mediaUrl, message.type ?: "document", fileName)
                 }
             )
         }
@@ -134,12 +138,10 @@ private fun TextMessage(text: String, query: String?, isSearchFocused: Boolean, 
                 break
             }
 
-            // Append text before the highlight
             withStyle(style = SpanStyle(color = textColor)) {
                 append(text.substring(startIndex, index))
             }
 
-            // Highlighted text
             withStyle(
                 style = SpanStyle(
                     background = if (isSearchFocused) Color(0xFFFFA726) else Color(0xFFFFF176),
@@ -159,7 +161,6 @@ private fun TextMessage(text: String, query: String?, isSearchFocused: Boolean, 
 private fun MediaMessage(url: String, isVideo: Boolean, isSending: Boolean, onClick: () -> Unit) {
     val context = LocalContext.current
 
-    // Custom ImageLoader with VideoFrameDecoder to fetch video thumbnails automatically
     val imageLoader = remember {
         ImageLoader.Builder(context)
             .components {

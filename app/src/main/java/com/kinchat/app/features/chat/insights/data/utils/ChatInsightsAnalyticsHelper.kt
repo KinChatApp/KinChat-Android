@@ -6,7 +6,7 @@ import java.time.format.TextStyle
 import java.time.temporal.ChronoUnit
 import java.util.Locale
 
-object ChatInsightsAnalyticsHelper {
+internal object ChatInsightsAnalyticsHelper {
 
     fun calculateDaysConnected(firstMessageAt: String?): Int {
         if (firstMessageAt == null) return 1
@@ -23,7 +23,7 @@ object ChatInsightsAnalyticsHelper {
 
     fun calculateMostActiveDay(recentMessages: List<MessageDto>): String {
         if (recentMessages.isEmpty()) return "N/A"
-        
+
         val daysCount = mutableMapOf<String, Int>()
         recentMessages.forEach { msg ->
             msg.createdAt?.let { dateStr ->
@@ -41,7 +41,7 @@ object ChatInsightsAnalyticsHelper {
 
     fun calculateMostActiveHour(recentMessages: List<MessageDto>): String {
         if (recentMessages.isEmpty()) return "N/A"
-        
+
         val hoursCount = mutableMapOf<String, Int>()
         recentMessages.forEach { msg ->
             msg.createdAt?.let { dateStr ->

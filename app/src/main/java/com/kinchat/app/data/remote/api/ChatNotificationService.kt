@@ -3,7 +3,8 @@ package com.kinchat.app.data.remote.api
 import android.content.Context
 import android.widget.Toast
 import com.kinchat.app.core.logging.AppLogger
-import com.kinchat.app.data.repository.SendMessageRequest
+// 🚀 Fixed import path for SendMessageRequest
+import com.kinchat.app.data.repository.chat.SendMessageRequest
 import dagger.hilt.android.qualifiers.ApplicationContext
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.functions.functions

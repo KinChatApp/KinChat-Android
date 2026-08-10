@@ -18,7 +18,7 @@ import com.kinchat.app.core.ui.components.BatteryOptimizationDialog
 import com.kinchat.app.core.ui.components.CrashLogDialog
 import com.kinchat.app.core.ui.components.NotificationPermissionEffect
 import com.kinchat.app.core.utils.BatteryOptimizationHelper
-import com.kinchat.app.core.utils.CrashLogManager
+import com.kinchat.app.core.logging.CrashLogManager
 import com.kinchat.app.domain.repository.AuthRepository
 import com.kinchat.app.navigation.AppNavigation
 import dagger.hilt.android.AndroidEntryPoint
