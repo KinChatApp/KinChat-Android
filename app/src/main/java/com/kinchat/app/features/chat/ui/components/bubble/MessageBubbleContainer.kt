@@ -34,6 +34,7 @@ fun MessageBubbleContainer(
     message: MessageUiModel,
     isSelected: Boolean,
     isSelectionModeEnabled: Boolean,
+    showReactionPicker: Boolean = false,
     onSelect: () -> Unit,
     onSwipeReply: () -> Unit,
     onReact: (String) -> Unit,
@@ -77,7 +78,7 @@ fun MessageBubbleContainer(
             .fillMaxWidth()
             .zIndex(if (isSelected) 100f else 0f)
             .background(selectionBgColor)
-            .pointerInput(message.id, "outer") {
+            .pointerInput(message.id, isSelectionModeEnabled, message.status.isDeleted, "outer") {
                 detectTapGestures(
                     onLongPress = { handleLongPress() },
                     onTap = { handleTap() }
@@ -115,7 +116,7 @@ fun MessageBubbleContainer(
                         Column(
                             modifier = swipeModifier
                                 .widthIn(min = BubbleDimens.MinWidth, max = BubbleDimens.MaxWidth)
-                                .pointerInput(message.id, "inner_tap") {
+                                .pointerInput(message.id, isSelectionModeEnabled, message.status.isDeleted, "inner_tap") {
                                     detectTapGestures(
                                         onLongPress = { handleLongPress() },
                                         onTap = { handleTap() }
@@ -155,8 +156,9 @@ fun MessageBubbleContainer(
                     }
                 }
 
-                // ৩. লং-প্রেস পপআপ
-                if (isSelected) {
+                // ৩. লং-প্রেস পপআপ (শুধু সিঙ্গেল-সিলেকশনে দেখানো হয় যেন মাল্টি-সিলেক্টে
+                // একাধিক পপআপ ওভারল্যাপ না হয়)
+                if (isSelected && showReactionPicker) {
                     Box(
                         modifier = Modifier
                             .align(Alignment.TopCenter)

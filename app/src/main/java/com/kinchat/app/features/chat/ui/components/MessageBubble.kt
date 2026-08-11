@@ -10,6 +10,7 @@ fun MessageBubble(
     message: MessageUiModel,
     isSelected: Boolean,
     isSelectionModeEnabled: Boolean = false,
+    showReactionPicker: Boolean = false,
     onSelect: () -> Unit,
     onAction: (MessageAction) -> Unit
 ) {
@@ -25,6 +26,7 @@ fun MessageBubble(
             message = message,
             isSelected = isSelected,
             isSelectionModeEnabled = isSelectionModeEnabled,
+            showReactionPicker = showReactionPicker,
             onSelect = onSelect,
             onSwipeReply = { if (!message.status.isDeleted) onAction(MessageAction.Reply(message)) },
             onReact = { reaction -> onAction(MessageAction.React(message.id, reaction)) }

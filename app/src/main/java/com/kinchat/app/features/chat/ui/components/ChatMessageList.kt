@@ -43,9 +43,14 @@ fun ChatMessageList(
     val scope = rememberCoroutineScope()
     val showScrollToBottom by remember { derivedStateOf { listState.firstVisibleItemIndex > 3 } }
 
+    // Only auto-scroll to the newest message when the user is already at (or
+    // essentially at) the newest message. Never yank the list while the user is
+    // reading older messages.
+    val isNearNewest by remember { derivedStateOf { listState.firstVisibleItemIndex <= 1 } }
+
     LaunchedEffect(messagesCount) {
-        if (messagesCount > 0) {
-            listState.animateScrollToItem(0)
+        if (messagesCount > 0 && isNearNewest) {
+            listState.scrollToItem(0)
         }
     }
 
@@ -70,6 +75,7 @@ fun ChatMessageList(
                         message = item.uiModel,
                         isSelected = selectedMessages.contains(item.uiModel.id),
                         isSelectionModeEnabled = isSelectionMode,
+                        showReactionPicker = selectedMessages.size == 1,
                         onSelect = { onMessageSelect(item.uiModel.id) },
                         onAction = onMessageAction
                     )

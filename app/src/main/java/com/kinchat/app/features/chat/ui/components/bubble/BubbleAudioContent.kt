@@ -47,7 +47,7 @@ fun AudioContent(
                 .size(38.dp)
                 .clip(CircleShape)
                 .background(if (message.isMe) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primaryContainer)
-                .pointerInput(message.id) {
+                .pointerInput(message.id, isSelectionModeEnabled) {
                     detectTapGestures(
                         onLongPress = { 
                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)

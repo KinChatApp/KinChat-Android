@@ -62,7 +62,7 @@ fun TextContent(
             lineHeight = 22.sp,
             modifier = Modifier
                 .padding(horizontal = 4.dp)
-                .pointerInput(message.id) {
+                .pointerInput(message.id, isSelectionModeEnabled) {
                     detectTapGestures(
                         onLongPress = {
                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)

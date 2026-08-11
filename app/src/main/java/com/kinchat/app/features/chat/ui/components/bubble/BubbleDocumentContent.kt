@@ -42,7 +42,7 @@ fun DocumentContent(
             .clip(RoundedCornerShape(10.dp))
             .background(textColor.copy(alpha = 0.06f))
             .padding(10.dp)
-            .pointerInput(message.id) {
+            .pointerInput(message.id, isSelectionModeEnabled) {
                 detectTapGestures(
                     onLongPress = { 
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)

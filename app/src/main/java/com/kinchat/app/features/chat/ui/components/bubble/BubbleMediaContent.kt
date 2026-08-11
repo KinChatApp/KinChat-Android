@@ -54,7 +54,7 @@ fun MediaContent(
     Column(
         modifier = Modifier
             .clip(RoundedCornerShape(14.dp))
-            .pointerInput(message.id) {
+            .pointerInput(message.id, isSelectionModeEnabled) {
                 detectTapGestures(
                     onLongPress = {
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)

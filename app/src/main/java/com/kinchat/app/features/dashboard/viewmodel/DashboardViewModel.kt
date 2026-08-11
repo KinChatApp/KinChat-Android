@@ -20,6 +20,7 @@ data class DashboardUiState(
     val chats: List<Chat> = emptyList(),
     val selectedChatForMenu: Chat? = null,
     val showConfirmDeleteDialog: Boolean = false,
+    val pendingDeleteChatId: String? = null,
     val error: String? = null
 )
 
@@ -59,6 +60,21 @@ class DashboardViewModel @Inject constructor(
 
     fun closeContextMenu() {
         _uiState.update { it.copy(selectedChatForMenu = null) }
+    }
+
+    /**
+     * Clears all transient UI state (context menu / delete dialog). Called when
+     * the dashboard leaves composition so temporary UI can never survive a tab
+     * or navigation change and unexpectedly reappear when the screen returns.
+     */
+    fun clearTransientUiState() {
+        _uiState.update {
+            it.copy(
+                selectedChatForMenu = null,
+                showConfirmDeleteDialog = false,
+                pendingDeleteChatId = null
+            )
+        }
     }
 
     // --- Action Handlers (With Supabase Connection) ---
@@ -144,17 +160,24 @@ class DashboardViewModel @Inject constructor(
 
     // --- Delete Handlers ---
 
-    fun requestDeleteChat() {
-        _uiState.update { it.copy(showConfirmDeleteDialog = true, selectedChatForMenu = null) }
+    fun requestDeleteChat(chatId: String) {
+        _uiState.update {
+            it.copy(
+                showConfirmDeleteDialog = true,
+                selectedChatForMenu = null,
+                pendingDeleteChatId = chatId
+            )
+        }
     }
 
     fun cancelDeleteChat() {
-        _uiState.update { it.copy(showConfirmDeleteDialog = false) }
+        _uiState.update { it.copy(showConfirmDeleteDialog = false, pendingDeleteChatId = null) }
     }
 
-    fun confirmDeleteChat(chatId: String) {
+    fun confirmDeleteChat() {
+        val chatId = _uiState.value.pendingDeleteChatId ?: return
         viewModelScope.launch {
-            _uiState.update { it.copy(showConfirmDeleteDialog = false) }
+            _uiState.update { it.copy(showConfirmDeleteDialog = false, pendingDeleteChatId = null) }
             val result = chatRepository.deleteChatParticipant(chatId)
             if (result.isSuccess) {
                 _uiState.update { currentState ->

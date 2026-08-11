@@ -1,6 +1,7 @@
 package com.kinchat.app.features.chat.ui
 
 import android.net.Uri
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -67,6 +68,23 @@ fun ChatScreenContent(
 ) {
     val listState = rememberLazyListState()
     val isSelectionMode = selectedMessages.isNotEmpty()
+
+    // Back must first dismiss/clear any transient UI (selection mode, reaction
+    // picker, reply/edit bar, delete sheet, error dialog, header menu). Only
+    // when none of those are active does Back fall through to navigation.
+    BackHandler(
+        enabled = isSelectionMode || replyingTo != null || editingMessage != null ||
+            showDeleteSheet || sendErrorText != null || isMenuExpanded
+    ) {
+        when {
+            isSelectionMode -> onClearSelection()
+            replyingTo != null || editingMessage != null -> onCancelReply()
+            showDeleteSheet -> onDismissDeleteSheet()
+            sendErrorText != null -> onDismissSendError()
+            isMenuExpanded -> onMenuToggle(false)
+            else -> onBack()
+        }
+    }
 
     val canEdit = remember(selectedMsgsList) {
         MessagePermissions.canEdit(selectedMsgsList, currentUserId)

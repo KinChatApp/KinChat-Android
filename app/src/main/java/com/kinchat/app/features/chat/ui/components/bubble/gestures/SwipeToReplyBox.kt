@@ -66,7 +66,7 @@ fun SwipeToReplyBox(
 
         val swipeModifier = Modifier
             .offset { IntOffset(displayOffset.roundToInt(), 0) }
-            .pointerInput(messageId, "swipe") {
+            .pointerInput(messageId, isSelectionModeEnabled, "swipe") {
                 detectHorizontalDragGestures(
                     onDragStart = { if (!isSelectionModeEnabled) isDragging = true },
                     onDragEnd = {

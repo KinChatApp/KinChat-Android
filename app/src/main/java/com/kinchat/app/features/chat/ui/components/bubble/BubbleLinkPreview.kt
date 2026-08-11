@@ -56,7 +56,7 @@ fun LinkPreviewWidget(
                 .padding(top = 4.dp, bottom = 2.dp)
                 .clip(RoundedCornerShape(8.dp))
                 .background(bgColor)
-                .pointerInput(url) {
+                .pointerInput(url, isSelectionModeEnabled) {
                     detectTapGestures(
                         onLongPress = {
                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)

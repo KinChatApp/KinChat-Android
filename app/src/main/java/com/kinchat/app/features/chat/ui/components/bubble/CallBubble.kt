@@ -48,7 +48,7 @@ fun CallBubble(
 
     Box(
         modifier = Modifier.fillMaxWidth().background(selectionBgColor)
-            .pointerInput(message.id) {
+            .pointerInput(message.id, isSelected, message.status.isDeleted) {
                 detectTapGestures(
                     onLongPress = { if (!message.status.isDeleted) onSelect(message) },
                     onTap = { if (isSelected) onSelect(null) }

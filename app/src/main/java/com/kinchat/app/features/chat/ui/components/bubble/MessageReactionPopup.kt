@@ -18,13 +18,21 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupProperties
 
 @Composable
 fun MessageReactionPopup(
     haptic: HapticFeedback,
     onReact: (String) -> Unit
 ) {
-    Popup(alignment = Alignment.TopCenter, offset = IntOffset(0, -140)) {
+    // dismissOnBackPress = false so the popup never swallows the Back press;
+    // Back is handled by the screen-level BackHandler which clears the
+    // selection (and therefore this reaction picker) first.
+    Popup(
+        alignment = Alignment.TopCenter,
+        offset = IntOffset(0, -140),
+        properties = PopupProperties(focusable = false, dismissOnBackPress = false)
+    ) {
         Row(
             modifier = Modifier
                 .shadow(8.dp, RoundedCornerShape(30.dp))

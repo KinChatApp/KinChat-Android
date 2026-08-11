@@ -10,6 +10,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -36,6 +37,13 @@ fun DashboardScreen(
     viewModel: DashboardViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
+
+    // Transient UI (context menu / delete dialog) lives in the ViewModel, which
+    // survives tab switches (state is saved/restored). Clear it whenever the
+    // dashboard leaves composition so it cannot reappear unexpectedly on return.
+    DisposableEffect(Unit) {
+        onDispose { viewModel.clearTransientUiState() }
+    }
 
     var selectedFilter by remember { mutableStateOf("All") }
 
@@ -80,7 +88,7 @@ fun DashboardScreen(
                 onArchiveToggle = { viewModel.archiveChat(chat.id) },
                 onMuteToggle = { viewModel.muteChat(chat.id) },
                 onBlockToggle = { viewModel.blockChat(chat.id) },
-                onDelete = viewModel::requestDeleteChat
+                onDelete = { viewModel.requestDeleteChat(chat.id) }
             )
         }
 
@@ -90,9 +98,7 @@ fun DashboardScreen(
                 title = { Text("Delete Chat") },
                 text = { Text("Are you sure you want to delete this chat?") },
                 confirmButton = {
-                    TextButton(onClick = { 
-                        viewModel.uiState.value.selectedChatForMenu?.id?.let { viewModel.confirmDeleteChat(it) } 
-                    }) {
+                    TextButton(onClick = viewModel::confirmDeleteChat) {
                         Text("Delete", color = Color.Red)
                     }
                 },
