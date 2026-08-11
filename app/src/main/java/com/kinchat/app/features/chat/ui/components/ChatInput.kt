@@ -2,6 +2,7 @@ package com.kinchat.app.features.chat.ui.components
 
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -45,10 +46,14 @@ fun ChatInput(
         uri?.let { onMediaSelected(it) }
     }
 
-    val imagePickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
-    ) { uri: Uri? ->
-        uri?.let { onMediaSelected(it) }
+    // এখানে PickVisualMedia এর জায়গায় PickMultipleVisualMedia ব্যবহার করা হয়েছে
+    val mediaPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickMultipleVisualMedia()
+    ) { uris: List<Uri> ->
+        // একাধিক ফাইল সিলেক্ট হলে লুপের মাধ্যমে একটা একটা করে সেন্ড করা হবে
+        uris.forEach { uri ->
+            onMediaSelected(uri)
+        }
     }
 
     LaunchedEffect(editingMessage) {
@@ -94,14 +99,18 @@ fun ChatInput(
                     onTextChange = { text = it },
                     partnerName = partnerName,
                     onAttachClick = { filePickerLauncher.launch("*/*") },
-                    onCameraClick = { imagePickerLauncher.launch("image/*") },
+                    onCameraClick = { 
+                        mediaPickerLauncher.launch(
+                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)
+                        ) 
+                    },
                     modifier = Modifier.weight(1f)
                 )
 
                 Spacer(modifier = Modifier.width(6.dp))
 
                 val isTextPresent = text.isNotBlank()
-                
+
                 SendMicButton(
                     isTextPresent = isTextPresent,
                     onClick = {

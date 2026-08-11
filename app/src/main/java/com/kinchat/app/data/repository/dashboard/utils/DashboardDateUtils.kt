@@ -1,20 +1,17 @@
 package com.kinchat.app.data.repository.dashboard.utils
 
-import java.text.SimpleDateFormat
-import java.util.Locale
-import java.util.TimeZone
-
 internal object DashboardDateUtils {
     fun parseTimestamp(isoString: String?): Long {
         if (isoString.isNullOrBlank()) return System.currentTimeMillis()
-        
+
+        // 🚀 ECHO FIX: Instant.parse accepts any ISO-8601 variant (incl. microsecond
+        // precision), so the preview row gets the REAL message timestamp instead of
+        // falling back to "now", which made the synthetic row float to the bottom of
+        // the chat list right next to the user's newest message.
         return try {
-            val format = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSSSS", Locale.getDefault()).apply { 
-                timeZone = TimeZone.getTimeZone("UTC") 
-            }
-            format.parse(isoString)?.time ?: System.currentTimeMillis()
-        } catch (e: Exception) { 
-            System.currentTimeMillis() 
+            java.time.Instant.parse(isoString).toEpochMilli()
+        } catch (e: Exception) {
+            System.currentTimeMillis()
         }
     }
 }
