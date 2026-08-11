@@ -1,5 +1,6 @@
 package com.kinchat.app.data.repository.chat.handlers
 
+import android.net.Uri
 import com.kinchat.app.core.logging.AppLogger
 import com.kinchat.app.data.local.db.AttachmentDao
 import com.kinchat.app.data.local.db.AttachmentEntity
@@ -28,8 +29,8 @@ class AttachmentSender(
         mimeType: String,
         fileName: String,
         fileSize: Long,
-        fileBytes: ByteArray,
-        replyToId: String? = null
+        replyToId: String? = null,
+        caption: String? = null
     ): Result<Unit> = runCatching {
         AppLogger.d("AttachmentSender", "Saving attachment message to local DB: $messageId")
         val timestamp = System.currentTimeMillis()
@@ -44,7 +45,7 @@ class AttachmentSender(
             id = messageId,
             chatId = chatId,
             senderId = senderId,
-            content = fileName,
+            content = caption?.takeIf { it.isNotBlank() } ?: fileName,
             type = msgType,
             status = MessageStatus.PENDING,
             replyToId = replyToId,
@@ -71,7 +72,7 @@ class AttachmentSender(
         val uploadFolder = "kinchat_attachments/$chatId"
 
         try {
-            val uploadResponse = uploader.uploadFile(fileBytes, uploadFolder)
+            val uploadResponse = uploader.uploadFile(Uri.parse(localUri), uploadFolder)
             val secureUrl = uploadResponse["secure_url"].toString()
             val publicId = uploadResponse["public_id"].toString()
 

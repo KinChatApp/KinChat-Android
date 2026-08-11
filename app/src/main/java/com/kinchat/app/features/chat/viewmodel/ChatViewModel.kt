@@ -10,7 +10,7 @@ import com.kinchat.app.domain.model.ChatMessage
 import com.kinchat.app.domain.repository.ChatRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
-import kotlinx.coroutines.Dispatchers
+import java.io.File
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -138,49 +138,80 @@ class ChatViewModel @Inject constructor(
     }
 
     // 🚀 New function to process and send Media/Attachments
-    fun sendAttachment(uri: Uri, replyToId: String? = null) {
+    fun sendAttachment(uri: Uri, replyToId: String? = null, caption: String? = null) {
         val chatId = currentChatId ?: return
         if (currentUserId.isEmpty()) return
 
         AppLogger.i("ChatVM", "UI Request: Processing attachment $uri")
 
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                val contentResolver = context.contentResolver
-                val mimeType = contentResolver.getType(uri) ?: "application/octet-stream"
-                var fileName = "attachment_${System.currentTimeMillis()}"
-                var fileSize = 0L
+        viewModelScope.launch {
+            processAttachment(uri, replyToId, caption)
+        }
+    }
 
-                // Extract File Metadata (Name & Size)
-                contentResolver.query(uri, null, null, null, null)?.use { cursor ->
-                    val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-                    val sizeIndex = cursor.getColumnIndex(OpenableColumns.SIZE)
-                    if (cursor.moveToFirst()) {
-                        if (nameIndex != -1) fileName = cursor.getString(nameIndex)
-                        if (sizeIndex != -1) fileSize = cursor.getLong(sizeIndex)
-                    }
-                }
+    fun sendAttachments(uris: List<Uri>, replyToId: String?, caption: String?) {
+        val chatId = currentChatId ?: return
+        if (currentUserId.isEmpty() || uris.isEmpty()) return
 
-                // Read File Bytes
-                val fileBytes = contentResolver.openInputStream(uri)?.use { it.readBytes() }
+        AppLogger.i("ChatVM", "UI Request: Processing ${uris.size} attachments for chat $chatId")
 
-                if (fileBytes != null) {
-                    chatRepository.sendAttachmentMessage(
-                        chatId = chatId,
-                        senderId = currentUserId,
-                        localUri = uri.toString(),
-                        mimeType = mimeType,
-                        fileName = fileName,
-                        fileSize = fileSize,
-                        fileBytes = fileBytes,
-                        replyToId = replyToId
-                    )
-                } else {
-                    AppLogger.e("ChatVM", "Failed to read file bytes from URI")
-                }
-            } catch (e: Exception) {
-                AppLogger.e("ChatVM", "Error processing attachment", e)
+        viewModelScope.launch {
+            uris.forEachIndexed { index, uri ->
+                processAttachment(uri, replyToId, if (index == 0) caption else null)
             }
+        }
+    }
+
+    private suspend fun processAttachment(uri: Uri, replyToId: String?, caption: String?) {
+        val chatId = currentChatId ?: return
+        if (currentUserId.isEmpty()) return
+
+        try {
+            val contentResolver = context.contentResolver
+            val mimeType = contentResolver.getType(uri) ?: "application/octet-stream"
+            var fileName = "attachment_${System.currentTimeMillis()}"
+            var fileSize = 0L
+
+            // Extract File Metadata (Name & Size)
+            contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                val sizeIndex = cursor.getColumnIndex(OpenableColumns.SIZE)
+                if (cursor.moveToFirst()) {
+                    if (nameIndex != -1) fileName = cursor.getString(nameIndex)
+                    if (sizeIndex != -1) fileSize = cursor.getLong(sizeIndex)
+                }
+            }
+
+            val result = chatRepository.sendAttachmentMessage(
+                chatId = chatId,
+                senderId = currentUserId,
+                localUri = uri.toString(),
+                mimeType = mimeType,
+                fileName = fileName,
+                fileSize = fileSize,
+                replyToId = replyToId,
+                caption = caption
+            )
+
+            if (result.isSuccess) {
+                cleanupCameraCacheFile(uri)
+            }
+        } catch (e: Exception) {
+            AppLogger.e("ChatVM", "Error processing attachment", e)
+        }
+    }
+
+    private fun cleanupCameraCacheFile(uri: Uri) {
+        // Remove one-shot camera captures from cache after a successful upload.
+        try {
+            if (uri.scheme != "content" || uri.authority != "${context.packageName}.fileprovider") return
+            // FileProvider cache-path "camera_images" maps to cacheDir/camera_images/<name>
+            val fileName = uri.lastPathSegment ?: return
+            if (fileName.isBlank() || !fileName.startsWith("IMG_")) return
+            val file = File(File(context.cacheDir, "camera_images"), fileName)
+            if (file.exists()) file.delete()
+        } catch (e: Exception) {
+            AppLogger.e("ChatVM", "Failed to clean up camera cache file", e)
         }
     }
 

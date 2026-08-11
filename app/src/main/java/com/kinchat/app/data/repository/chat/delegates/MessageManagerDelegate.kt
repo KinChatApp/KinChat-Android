@@ -31,8 +31,8 @@ class MessageManagerDelegate @Inject constructor(
         mimeType: String,
         fileName: String,
         fileSize: Long,
-        fileBytes: ByteArray,
-        replyToId: String?
+        replyToId: String?,
+        caption: String?
     ): Result<Unit> {
         val messageId = UUID.randomUUID().toString()
         AppLogger.i("MessageManagerDelegate", "Attempting to send attachment [$messageId] to chatId: $chatId")
@@ -45,8 +45,8 @@ class MessageManagerDelegate @Inject constructor(
             mimeType = mimeType,
             fileName = fileName,
             fileSize = fileSize,
-            fileBytes = fileBytes,
-            replyToId = replyToId
+            replyToId = replyToId,
+            caption = caption
         )
 
         syncCoordinator.triggerSync()

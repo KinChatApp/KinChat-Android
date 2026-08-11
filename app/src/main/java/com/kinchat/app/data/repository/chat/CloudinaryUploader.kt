@@ -1,5 +1,6 @@
 package com.kinchat.app.data.repository.chat
 
+import android.net.Uri
 import com.cloudinary.android.MediaManager
 import com.cloudinary.android.callback.ErrorInfo
 import com.cloudinary.android.callback.UploadCallback
@@ -18,7 +19,7 @@ class CloudinaryUploader(
     private val supabaseClient: SupabaseClient
 ) {
     suspend fun uploadFile(
-        fileBytes: ByteArray,
+        uri: Uri,
         uploadFolder: String
     ): Map<*, *> {
         AppLogger.d("CloudinaryUploader", "🔍 [1/3] Requesting Cloudinary Signature...")
@@ -30,7 +31,7 @@ class CloudinaryUploader(
         return withTimeout(120_000L) {
             withContext(Dispatchers.IO) {
                 executeUpload(
-                    fileBytes = fileBytes,
+                    uri = uri,
                     uploadFolder = uploadFolder,
                     signature = authData.signature,
                     timestamp = authData.timestamp,
@@ -57,7 +58,7 @@ class CloudinaryUploader(
     }
 
     private suspend fun executeUpload(
-        fileBytes: ByteArray,
+        uri: Uri,
         uploadFolder: String,
         signature: String,
         timestamp: Long,
@@ -66,7 +67,7 @@ class CloudinaryUploader(
         AppLogger.d("CloudinaryUploader", "🚀 Cloudinary Signed Upload called")
 
         try {
-            MediaManager.get().upload(fileBytes)
+            MediaManager.get().upload(uri)
                 .option("folder", uploadFolder)
                 .option("resource_type", "auto")
                 .option("signature", signature)

@@ -3,10 +3,13 @@ package com.kinchat.app.features.chat.ui.components.bubble
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -23,13 +26,12 @@ import com.kinchat.app.features.chat.ui.models.MessageUiModel
 
 @Composable
 fun MediaContent(
-    message: MessageUiModel, 
-    isSelectionModeEnabled: Boolean, 
-    onSelect: () -> Unit, 
+    message: MessageUiModel,
+    isSelectionModeEnabled: Boolean,
+    onSelect: () -> Unit,
     onMediaClick: () -> Unit
 ) {
     val haptic = LocalHapticFeedback.current
-
     val mediaUrl = message.media?.url
     val imageModel = remember(mediaUrl) {
         when {
@@ -41,21 +43,29 @@ fun MediaContent(
         }
     }
 
-    Box(
+    // Caption is stored in the message content for the first attachment in a
+    // multi-media send; it differs from the raw file name when present.
+    val caption = remember(message.content, message.media?.fileName) {
+        message.content
+            ?.takeIf { it.isNotBlank() && it != message.media?.fileName }
+            ?.trim()
+    }
+
+    Column(
         modifier = Modifier
             .clip(RoundedCornerShape(14.dp))
             .pointerInput(message.id) {
                 detectTapGestures(
-                    onLongPress = { 
+                    onLongPress = {
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                        onSelect() 
+                        onSelect()
                     },
-                    onTap = { 
-                        if (isSelectionModeEnabled) { 
+                    onTap = {
+                        if (isSelectionModeEnabled) {
                             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                            onSelect() 
+                            onSelect()
                         } else {
-                            onMediaClick() 
+                            onMediaClick()
                         }
                     }
                 )
@@ -66,12 +76,21 @@ fun MediaContent(
                 .data(imageModel)
                 .crossfade(true)
                 .build(),
-            contentDescription = null, 
+            contentDescription = null,
             contentScale = ContentScale.Crop,
             modifier = Modifier
                 .fillMaxWidth()
                 .height(BubbleDimens.MediaHeight)
                 .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
         )
+
+        if (caption != null) {
+            Text(
+                text = caption,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+            )
+        }
     }
 }

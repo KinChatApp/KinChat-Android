@@ -48,10 +48,10 @@ class ChatMessageManager(
         mimeType: String,
         fileName: String,
         fileSize: Long,
-        fileBytes: ByteArray,
-        replyToId: String? = null
+        replyToId: String? = null,
+        caption: String? = null
     ): Result<Unit> = attachmentSender.sendAttachmentMessage(
-        messageId, chatId, senderId, localUri, mimeType, fileName, fileSize, fileBytes, replyToId
+        messageId, chatId, senderId, localUri, mimeType, fileName, fileSize, replyToId, caption
     )
 
     suspend fun addReaction(messageId: String, userId: String, reactionType: String): Result<Unit> = 

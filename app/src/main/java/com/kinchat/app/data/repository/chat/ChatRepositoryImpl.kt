@@ -28,9 +28,9 @@ class ChatRepositoryImpl @Inject constructor(
 
     override suspend fun sendAttachmentMessage(
         chatId: String, senderId: String, localUri: String, mimeType: String,
-        fileName: String, fileSize: Long, fileBytes: ByteArray, replyToId: String?
+        fileName: String, fileSize: Long, replyToId: String?, caption: String?
     ): Result<Unit> =
-        messageManagerDelegate.sendAttachmentMessage(chatId, senderId, localUri, mimeType, fileName, fileSize, fileBytes, replyToId)
+        messageManagerDelegate.sendAttachmentMessage(chatId, senderId, localUri, mimeType, fileName, fileSize, replyToId, caption)
 
     override suspend fun editMessage(messageId: String, newContent: String): Result<Unit> =
         messageEditor.editMessage(messageId, newContent)

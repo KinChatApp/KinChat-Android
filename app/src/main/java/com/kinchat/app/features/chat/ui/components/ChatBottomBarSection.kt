@@ -20,6 +20,7 @@ fun ChatBottomBarSection(
     onDeleteRequested: () -> Unit,
     onSendMessage: suspend (String) -> Boolean,
     onMediaSelected: (Uri) -> Unit, // 🚀 FIX: Added callback here
+    onOpenMediaPicker: () -> Unit = {},
     updateTypingStatus: () -> Unit,
     partnerName: String,
     replyingToMessage: ChatMessage?,
@@ -50,7 +51,8 @@ fun ChatBottomBarSection(
         ) {
             ChatInput(
                 onSendMessage = onSendMessage,
-                onMediaSelected = onMediaSelected, // 🚀 FIX: Passed callback to ChatInput
+                onMediaSelected = onMediaSelected,
+                onOpenMediaPicker = onOpenMediaPicker,
                 updateTypingStatus = { updateTypingStatus() },
                 partnerName = partnerName,
                 replyingToMessage = replyingToMessage,

@@ -16,8 +16,8 @@ interface ChatRepository {
         mimeType: String,
         fileName: String,
         fileSize: Long,
-        fileBytes: ByteArray,
-        replyToId: String? = null
+        replyToId: String? = null,
+        caption: String? = null
     ): Result<Unit>
 
     suspend fun editMessage(messageId: String, newContent: String): Result<Unit> // 🚀 Added

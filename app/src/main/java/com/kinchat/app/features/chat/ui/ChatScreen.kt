@@ -52,12 +52,7 @@ fun ChatScreen(
     // Handle returned media from Custom Media Picker
     LaunchedEffect(returnedMediaUris) {
         if (!returnedMediaUris.isNullOrEmpty()) {
-            if (!returnedCaption.isNullOrBlank()) {
-                viewModel.sendMessage(returnedCaption, returnedReplyId)
-            }
-            returnedMediaUris.forEach { uri ->
-                viewModel.sendAttachment(uri, returnedReplyId)
-            }
+            viewModel.sendAttachments(returnedMediaUris, returnedReplyId, returnedCaption)
             onMediaProcessed()
         }
     }
@@ -142,13 +137,12 @@ fun ChatScreen(
         onMediaSelected = { uri ->
             val currentReplyId = replyingTo?.id
             replyingTo = null
-            
-            // Magic URI চেক করা হচ্ছে
-            if (uri.toString() == "kinchat://open_media_picker") {
-                onNavigateToMediaPicker(currentReplyId) // কাস্টম পিকার ওপেন হবে
-            } else {
-                viewModel.sendAttachment(uri, currentReplyId) // ডকুমেন্ট ফাইল সেন্ড হবে
-            }
+            viewModel.sendAttachment(uri, currentReplyId)
+        },
+        onOpenMediaPicker = {
+            val currentReplyId = replyingTo?.id
+            replyingTo = null
+            onNavigateToMediaPicker(currentReplyId)
         },
         onCancelReply = {
             replyingTo = null

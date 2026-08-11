@@ -28,22 +28,23 @@ fun NavGraphBuilder.chatNavGraph(navController: NavHostController) {
     ) { backStackEntry ->
         val chatId = backStackEntry.arguments?.getString(NavRoutes.CHAT_ID_ARG) ?: ""
 
-        // Get results back from Media Picker
+        // Get results back from Media Picker (consume immediately so a
+        // recreation/process-death can never re-send the same media twice).
         val savedStateHandle = backStackEntry.savedStateHandle
         val selectedMedia = savedStateHandle.get<List<String>>("selected_media_uris")
         val caption = savedStateHandle.get<String>("selected_media_caption")
         val replyId = savedStateHandle.get<String>("selected_media_reply_id")
+        if (selectedMedia != null) {
+            savedStateHandle.remove<List<String>>("selected_media_uris")
+            savedStateHandle.remove<String>("selected_media_caption")
+            savedStateHandle.remove<String>("selected_media_reply_id")
+        }
 
         ChatScreen(
             chatId = chatId,
             returnedMediaUris = selectedMedia?.map { Uri.parse(it) },
             returnedCaption = caption,
             returnedReplyId = replyId,
-            onMediaProcessed = { 
-                savedStateHandle.remove<List<String>>("selected_media_uris")
-                savedStateHandle.remove<String>("selected_media_caption")
-                savedStateHandle.remove<String>("selected_media_reply_id")
-            },
             onBack = { navController.popBackStack() },
             onNavigateToInfo = { id -> navController.navigate(NavRoutes.chatInfoRoute(id)) },
             onNavigateToMediaPicker = { currentReplyId -> 

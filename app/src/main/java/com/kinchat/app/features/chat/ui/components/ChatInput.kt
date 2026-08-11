@@ -29,6 +29,7 @@ import kotlinx.coroutines.launch
 fun ChatInput(
     onSendMessage: suspend (String) -> Boolean,
     onMediaSelected: (Uri) -> Unit = {},
+    onOpenMediaPicker: () -> Unit = {},
     updateTypingStatus: (Boolean) -> Unit,
     partnerName: String,
     replyingToMessage: ChatMessage? = null,
@@ -89,10 +90,7 @@ fun ChatInput(
                     onTextChange = { text = it },
                     partnerName = partnerName,
                     onAttachClick = { filePickerLauncher.launch("*/*") },
-                    onCameraClick = {
-                        // Magic URI: এটি ChatScreen এ গেলে আমাদের কাস্টম পিকার ওপেন হবে
-                        onMediaSelected(Uri.parse("kinchat://open_media_picker"))
-                    },
+                    onCameraClick = onOpenMediaPicker,
                     modifier = Modifier.weight(1f)
                 )
 
