@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 4,
-    "identityHash": "4fce2ce650b1a6287eebe3bfe9b5ea5f",
+    "identityHash": "ccd3cae61cc5b32e6d0c0166f9a1a8eb",
     "entities": [
       {
         "tableName": "users",
@@ -586,7 +586,7 @@
       },
       {
         "tableName": "message_reactions",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`messageId` TEXT NOT NULL, `userId` TEXT NOT NULL, `reaction` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, `isSynced` INTEGER NOT NULL, PRIMARY KEY(`messageId`, `userId`), FOREIGN KEY(`messageId`) REFERENCES `messages`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE , FOREIGN KEY(`userId`) REFERENCES `users`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`messageId` TEXT NOT NULL, `userId` TEXT NOT NULL, `reaction` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, `isSynced` INTEGER NOT NULL, PRIMARY KEY(`messageId`, `userId`))",
         "fields": [
           {
             "fieldPath": "messageId",
@@ -646,30 +646,7 @@
             "createSql": "CREATE INDEX IF NOT EXISTS `index_message_reactions_messageId` ON `${TABLE_NAME}` (`messageId`)"
           }
         ],
-        "foreignKeys": [
-          {
-            "table": "messages",
-            "onDelete": "CASCADE",
-            "onUpdate": "NO ACTION",
-            "columns": [
-              "messageId"
-            ],
-            "referencedColumns": [
-              "id"
-            ]
-          },
-          {
-            "table": "users",
-            "onDelete": "CASCADE",
-            "onUpdate": "NO ACTION",
-            "columns": [
-              "userId"
-            ],
-            "referencedColumns": [
-              "id"
-            ]
-          }
-        ]
+        "foreignKeys": []
       },
       {
         "tableName": "drafts",
@@ -1079,7 +1056,7 @@
     "views": [],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '4fce2ce650b1a6287eebe3bfe9b5ea5f')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'ccd3cae61cc5b32e6d0c0166f9a1a8eb')"
     ]
   }
 }

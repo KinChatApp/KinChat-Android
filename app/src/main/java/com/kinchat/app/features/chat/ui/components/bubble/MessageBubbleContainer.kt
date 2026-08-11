@@ -22,6 +22,7 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import com.kinchat.app.R
 import com.kinchat.app.domain.model.MessageType
 import com.kinchat.app.features.chat.ui.models.MessageUiModel
@@ -39,13 +40,13 @@ fun MessageBubbleContainer(
     content: @Composable () -> Unit
 ) {
     val haptic = LocalHapticFeedback.current
-    
+
     val scale by animateFloatAsState(
-        targetValue = if (isSelected) 0.97f else 1f, 
+        targetValue = if (isSelected) 0.97f else 1f,
         animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
         label = "scale"
     )
-    
+
     val selectionBgColor by animateColorAsState(
         targetValue = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f) else Color.Transparent,
         label = "bgColor"
@@ -57,8 +58,8 @@ fun MessageBubbleContainer(
     val handleTap = {
         if (isSelectionModeEnabled && !message.status.isDeleted) {
             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-            onSelect() 
-        } 
+            onSelect()
+        }
     }
 
     val handleLongPress = {
@@ -68,9 +69,13 @@ fun MessageBubbleContainer(
         }
     }
 
+    // 🚀 ডাইনামিক চেক: মেসেজে কোনো রিঅ্যাকশন আছে কিনা
+    val hasReactions = message.reactions.isNotEmpty()
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
+            .zIndex(if (isSelected) 100f else 0f)
             .background(selectionBgColor)
             .pointerInput(message.id, "outer") {
                 detectTapGestures(
@@ -99,50 +104,70 @@ fun MessageBubbleContainer(
             }
 
             Box(modifier = Modifier.scale(scale)) {
-                if (isSelected) {
-                    MessageReactionPopup(
-                        haptic = haptic,
-                        onReact = onReact
-                    )
-                }
+                // ১. মেসেজ বাবল (ডাইনামিক প্যাডিং: রিঅ্যাকশন থাকলে 16dp স্পেস, না থাকলে 0dp)
+                Box(modifier = Modifier.padding(bottom = if (hasReactions) 16.dp else 0.dp)) {
+                    SwipeToReplyBox(
+                        messageId = message.id,
+                        isSelectionModeEnabled = isSelectionModeEnabled,
+                        isDeleted = message.status.isDeleted,
+                        onSwipeReply = onSwipeReply
+                    ) { swipeModifier ->
+                        Column(
+                            modifier = swipeModifier
+                                .widthIn(min = BubbleDimens.MinWidth, max = BubbleDimens.MaxWidth)
+                                .pointerInput(message.id, "inner_tap") {
+                                    detectTapGestures(
+                                        onLongPress = { handleLongPress() },
+                                        onTap = { handleTap() }
+                                    )
+                                }
+                                .shadow(elevation = 1.dp, shape = shape)
+                                .clip(shape)
+                                .background(bubbleColor)
+                                .padding(if (message.type == MessageType.TEXT) 8.dp else 4.dp)
+                        ) {
+                            BubbleHeader(message)
+                            ReplyPreview(message.reply)
 
-                SwipeToReplyBox(
-                    messageId = message.id,
-                    isSelectionModeEnabled = isSelectionModeEnabled,
-                    isDeleted = message.status.isDeleted,
-                    onSwipeReply = onSwipeReply
-                ) { swipeModifier ->
-                    Column(
-                        modifier = swipeModifier
-                            .widthIn(min = BubbleDimens.MinWidth, max = BubbleDimens.MaxWidth)
-                            .pointerInput(message.id, "inner_tap") {
-                                detectTapGestures(
-                                    onLongPress = { handleLongPress() },
-                                    onTap = { handleTap() }
+                            if (message.status.isDeleted) {
+                                Text(
+                                    text = stringResource(R.string.chat_message_deleted),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                    fontSize = 14.sp,
+                                    modifier = Modifier.padding(horizontal = 4.dp)
                                 )
+                            } else {
+                                content()
                             }
-                            .shadow(elevation = 1.dp, shape = shape)
-                            .clip(shape)
-                            .background(bubbleColor)
-                            .padding(if (message.type == MessageType.TEXT) 8.dp else 4.dp)
-                    ) {
-                        BubbleHeader(message)
-                        ReplyPreview(message.reply)
-
-                        if (message.status.isDeleted) {
-                            Text(
-                                text = stringResource(R.string.chat_message_deleted),
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                                fontSize = 14.sp,
-                                modifier = Modifier.padding(horizontal = 4.dp)
-                            )
-                        } else {
-                            content()
+                            BubbleFooter(message)
                         }
-                        BubbleFooter(message)
                     }
                 }
-                ReactionBar(message)
+
+                // ২. রিঅ্যাকশন আইকন (যদি রিঅ্যাকশন থাকে তবেই রেন্ডার হবে)
+                if (hasReactions) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .offset(x = (-8).dp) 
+                    ) {
+                        ReactionBar(message)
+                    }
+                }
+
+                // ৩. লং-প্রেস পপআপ
+                if (isSelected) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopCenter)
+                            .offset(y = (-48).dp)
+                    ) {
+                        MessageReactionPopup(
+                            haptic = haptic,
+                            onReact = onReact
+                        )
+                    }
+                }
             }
         }
     }

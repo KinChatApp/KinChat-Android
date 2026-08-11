@@ -95,6 +95,9 @@ class ChatViewModel @Inject constructor(
                             chatRepository.updateLastRead(setupResult.actualChatId, currentUserId)
                         }
                     }
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    // Coroutine Cancel হলে থ্রো করে দিন, এটি নরমাল বিহেভিয়র
+                    throw e
                 } catch (e: Exception) {
                     AppLogger.e("ChatVM", "Error observing messages for ${setupResult.actualChatId}", e)
                 }
