@@ -1,5 +1,6 @@
 package com.kinchat.app.features.chat.ui
 
+import android.net.Uri
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -21,8 +22,13 @@ import kotlinx.coroutines.launch
 @Composable
 fun ChatScreen(
     chatId: String,
+    returnedMediaUris: List<Uri>? = null,
+    returnedCaption: String? = null,
+    returnedReplyId: String? = null,
+    onMediaProcessed: () -> Unit = {},
     onBack: () -> Unit,
     onNavigateToInfo: (String) -> Unit,
+    onNavigateToMediaPicker: (String?) -> Unit = {},
     viewModel: ChatViewModel = hiltViewModel()
 ) {
     val context = LocalContext.current
@@ -42,6 +48,19 @@ fun ChatScreen(
     var sendErrorText by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(chatId) { viewModel.initializeChat(chatId) }
+
+    // Handle returned media from Custom Media Picker
+    LaunchedEffect(returnedMediaUris) {
+        if (!returnedMediaUris.isNullOrEmpty()) {
+            if (!returnedCaption.isNullOrBlank()) {
+                viewModel.sendMessage(returnedCaption, returnedReplyId)
+            }
+            returnedMediaUris.forEach { uri ->
+                viewModel.sendAttachment(uri, returnedReplyId)
+            }
+            onMediaProcessed()
+        }
+    }
 
     val displayName = (partnerState as? PartnerUiState.Success)?.name ?: "Loading..."
     val partnerId = (partnerState as? PartnerUiState.Success)?.id ?: ""
@@ -121,9 +140,15 @@ fun ChatScreen(
             }
         },
         onMediaSelected = { uri ->
-            val replyId = replyingTo?.id
+            val currentReplyId = replyingTo?.id
             replyingTo = null
-            viewModel.sendAttachment(uri, replyId)
+            
+            // Magic URI চেক করা হচ্ছে
+            if (uri.toString() == "kinchat://open_media_picker") {
+                onNavigateToMediaPicker(currentReplyId) // কাস্টম পিকার ওপেন হবে
+            } else {
+                viewModel.sendAttachment(uri, currentReplyId) // ডকুমেন্ট ফাইল সেন্ড হবে
+            }
         },
         onCancelReply = {
             replyingTo = null

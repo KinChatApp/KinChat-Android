@@ -2,7 +2,6 @@ package com.kinchat.app.features.chat.ui.components
 
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -40,20 +39,11 @@ fun ChatInput(
     val coroutineScope = rememberCoroutineScope()
     var text by remember { mutableStateOf("") }
 
+    // শুধুমাত্র ডকুমেন্ট বা অন্যান্য ফাইলের জন্য ডিফল্ট পিকার
     val filePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         uri?.let { onMediaSelected(it) }
-    }
-
-    // এখানে PickVisualMedia এর জায়গায় PickMultipleVisualMedia ব্যবহার করা হয়েছে
-    val mediaPickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.PickMultipleVisualMedia()
-    ) { uris: List<Uri> ->
-        // একাধিক ফাইল সিলেক্ট হলে লুপের মাধ্যমে একটা একটা করে সেন্ড করা হবে
-        uris.forEach { uri ->
-            onMediaSelected(uri)
-        }
     }
 
     LaunchedEffect(editingMessage) {
@@ -99,10 +89,9 @@ fun ChatInput(
                     onTextChange = { text = it },
                     partnerName = partnerName,
                     onAttachClick = { filePickerLauncher.launch("*/*") },
-                    onCameraClick = { 
-                        mediaPickerLauncher.launch(
-                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)
-                        ) 
+                    onCameraClick = {
+                        // Magic URI: এটি ChatScreen এ গেলে আমাদের কাস্টম পিকার ওপেন হবে
+                        onMediaSelected(Uri.parse("kinchat://open_media_picker"))
                     },
                     modifier = Modifier.weight(1f)
                 )

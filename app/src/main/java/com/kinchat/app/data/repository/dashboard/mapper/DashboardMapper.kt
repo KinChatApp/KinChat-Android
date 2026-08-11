@@ -17,13 +17,13 @@ internal data class DashboardSyncResult(
 
 internal object DashboardMapper {
     fun mapPreviewsToEntities(
-        dtos: List<ChatPreviewDto>, 
+        dtos: List<ChatPreviewDto>,
         currentUserId: String
     ): DashboardSyncResult {
         val chats = mutableListOf<ChatEntity>()
         val participants = mutableListOf<ChatParticipantEntity>()
         val messages = mutableListOf<ChatMessageEntity>()
-        
+
         val currentTime = System.currentTimeMillis()
 
         dtos.forEach { dto ->
@@ -62,11 +62,6 @@ internal object DashboardMapper {
             )
 
             if (!dto.last_message_content.isNullOrBlank()) {
-                // 🚀 ECHO FIX: This row is a SYNTHETIC dashboard preview (synthetic id,
-                // sender "unknown") — NOT a real chat message. Mark it isDeletedForMe = true
-                // so the chat screen query (isDeletedForMe = 0) never renders it as a
-                // duplicate/echo of the real last message. The dashboard preview still
-                // works: ChatPreview JOINs by lastMessageId -> messages.id (no flag filter).
                 messages.add(
                     ChatMessageEntity(
                         id = dummyMsgId,

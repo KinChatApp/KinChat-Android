@@ -13,7 +13,8 @@ interface ChatMessageDao {
     @Query("SELECT * FROM messages WHERE chatId = :chatId AND isDeletedForMe = 0 ORDER BY createdAt ASC")
     fun observeMessagesWithDetails(chatId: String): Flow<List<MessageWithDetails>>
 
-    @Query("SELECT MAX(createdAt) FROM messages WHERE chatId = :chatId")
+    // 🚀 SENIOR FIX: Explicitly exclude synthetic preview IDs instead of relying on senderId
+    @Query("SELECT MAX(createdAt) FROM messages WHERE chatId = :chatId AND id NOT LIKE 'msg_%_last'")
     suspend fun getLastMessageTimestamp(chatId: String): Long?
 
     // 🚀 Fixed: Background Worker-এর জন্য মেসেজ ফেচ করার মেথড

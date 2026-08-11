@@ -25,31 +25,50 @@ class MissedMessageFetcher @Inject constructor(
                 retryWithBackoff {
                     val currentUserId = supabaseClient.auth.currentUserOrNull()?.id
                     val lastSyncTimeEpoch = chatMessageDao.getLastMessageTimestamp(chatId)
+                    val isInitialSync = lastSyncTimeEpoch == null
+                    
+                    var offset = 0L
+                    val limit = 1000L
+                    var hasMore = true
 
-                    val rawJsonArray = supabaseClient.postgrest[TABLE_MESSAGES]
-                        .select {
-                            filter {
-                                eq(COLUMN_CHAT_ID, chatId)
-                                lastSyncTimeEpoch?.let {
-                                    val lastSyncIso = Instant.ofEpochMilli(it).toString()
-                                    gt(COLUMN_CREATED_AT, lastSyncIso)
+                    // 🚀 SENIOR FIX: Pagination added for handling large history on cold install
+                    while (hasMore) {
+                        val rawJsonArray = supabaseClient.postgrest[TABLE_MESSAGES]
+                            .select {
+                                filter {
+                                    eq(COLUMN_CHAT_ID, chatId)
+                                    if (!isInitialSync) {
+                                        val lastSyncIso = Instant.ofEpochMilli(lastSyncTimeEpoch!!).toString()
+                                        gt(COLUMN_CREATED_AT, lastSyncIso)
+                                    }
                                 }
+                                range(offset, offset + limit - 1)
                             }
-                        }
-                        .decodeList<JsonObject>()
+                            .decodeList<JsonObject>()
 
-                    if (rawJsonArray.isNotEmpty()) {
-                        val entities = rawJsonArray
-                            .filterNot {
-                                currentUserId != null &&
-                                    it[COLUMN_SENDER_ID]?.jsonPrimitive?.content == currentUserId
-                            }
-                            .mapNotNull {
-                                ChatSyncMapper.mapJsonToEntity(it, chatId)
+                        if (rawJsonArray.isNotEmpty()) {
+                            val entities = rawJsonArray
+                                .filterNot {
+                                    // 🚀 SENIOR FIX: Only filter out own messages during delta sync, NOT on initial sync
+                                    !isInitialSync &&
+                                        currentUserId != null &&
+                                        it[COLUMN_SENDER_ID]?.jsonPrimitive?.content == currentUserId
+                                }
+                                .mapNotNull {
+                                    ChatSyncMapper.mapJsonToEntity(it, chatId)
+                                }
+
+                            if (entities.isNotEmpty()) {
+                                chatMessageDao.insertMessages(entities)
                             }
 
-                        if (entities.isNotEmpty()) {
-                            chatMessageDao.insertMessages(entities)
+                            if (rawJsonArray.size < limit.toInt()) {
+                                hasMore = false // Fetched the last chunk
+                            } else {
+                                offset += limit // Prepare for the next chunk
+                            }
+                        } else {
+                            hasMore = false // No more messages
                         }
                     }
                 }
