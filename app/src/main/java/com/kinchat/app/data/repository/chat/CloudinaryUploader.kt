@@ -11,11 +11,12 @@ import io.ktor.client.call.body
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import javax.inject.Inject
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlin.coroutines.suspendCoroutine
 
-class CloudinaryUploader(
+class CloudinaryUploader @Inject constructor(
     private val supabaseClient: SupabaseClient
 ) {
     suspend fun uploadFile(
@@ -23,10 +24,9 @@ class CloudinaryUploader(
         uploadFolder: String
     ): Map<*, *> {
         AppLogger.d("CloudinaryUploader", "🔍 [1/3] Requesting Cloudinary Signature...")
-        
+
         val authData = getSignature(uploadFolder)
         AppLogger.d("CloudinaryUploader", "✅ [1/3] Signature received")
-        
         AppLogger.d("CloudinaryUploader", "🔍 [2/3] Starting Signed Upload...")
         return withTimeout(120_000L) {
             withContext(Dispatchers.IO) {
@@ -50,7 +50,6 @@ class CloudinaryUploader(
             )
         }
         val authData = authResponse.body<CloudinaryAuthResponse>()
-
         if (authData.signature.isBlank()) {
             throw IllegalStateException("Cloudinary signature is empty")
         }

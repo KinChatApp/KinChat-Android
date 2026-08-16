@@ -28,7 +28,9 @@ fun ChatNormalTopBar(
                 isSaved = false,
                 onToggleSave = { },
                 onAudioCall = { },
-                onVideoCall = { }
+                onVideoCall = { },
+                targetUserId = partnerId,      // 🚀 ডায়নামিক পার্টনার আইডি যুক্ত করা হলো
+                targetUserName = displayName   // 🚀 ডায়নামিক পার্টনার নাম যুক্ত করা হলো
             ) {
                 ChatHeaderMenu(
                     isMenuExpanded = isMenuExpanded,

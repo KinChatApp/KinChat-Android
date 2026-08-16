@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.Tuktak" parent="android:Theme.DeviceDefault.Light.NoActionBar">
+    <!-- parent পরিবর্তন করে Theme.MaterialComponents.Light.NoActionBar করা হয়েছে -->
+    <style name="Theme.Tuktak" parent="Theme.MaterialComponents.Light.NoActionBar">
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
         <item name="android:windowBackground">@android:color/white</item>

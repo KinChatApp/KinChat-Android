@@ -8,7 +8,8 @@ class PendingOperationDispatcher @Inject constructor(
     private val messageHandler: MessageOperationHandler,
     private val reactionHandler: ReactionOperationHandler,
     private val participantHandler: ParticipantOperationHandler,
-    private val authHandler: AuthOperationHandler
+    private val authHandler: AuthOperationHandler,
+    private val attachmentHandler: AttachmentOperationHandler // 🚀 Added handler
 ) {
     suspend fun dispatch(op: PendingOperationEntity) {
         when (op.type) {
@@ -26,6 +27,9 @@ class PendingOperationDispatcher @Inject constructor(
             OperationType.UPDATE_LAST_READ -> participantHandler.handle(op)
 
             OperationType.UPDATE_FCM_TOKEN -> authHandler.handle(op)
+
+            // 🚀 UPLOAD_ATTACHMENT ঠিকমত রাউট করা হলো
+            OperationType.UPLOAD_ATTACHMENT -> attachmentHandler.handle(op)
 
             else -> {
                 // Operation type unhandled. The operation falls through

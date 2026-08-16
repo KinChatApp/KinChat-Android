@@ -1,5 +1,6 @@
 package com.kinchat.app.data.repository
 
+import com.kinchat.app.data.local.datastore.AuthPreferencesManager
 import com.kinchat.app.data.remote.api.AuthApi
 import com.kinchat.app.data.remote.model.OtpRequestDto
 import com.kinchat.app.data.remote.model.VerifyOtpRequestDto
@@ -16,7 +17,8 @@ import javax.inject.Singleton
 class AuthRepositoryImpl @Inject constructor(
     private val authApi: AuthApi,
     private val supabaseAuthDataSource: SupabaseAuthDataSource,
-    private val deviceTokenDataSource: DeviceTokenDataSource
+    private val deviceTokenDataSource: DeviceTokenDataSource,
+    private val authPreferencesManager: AuthPreferencesManager // INJECTED TO PERSIST meId
 ) : AuthRepository {
 
     override suspend fun requestOtp(phone: String, email: String?): RequestOtpResult {
@@ -56,6 +58,13 @@ class AuthRepositoryImpl @Inject constructor(
                         accessToken = body.session.accessToken,
                         refreshToken = body.session.refreshToken
                     )
+                    
+                    // 🚀 FIX: Persist meId after successful auth
+                    val userId = supabaseAuthDataSource.getCurrentUserId()
+                    if (userId != null) {
+                        authPreferencesManager.setMeId(userId)
+                    }
+
                     Result.success(Unit)
                 } else {
                     Result.failure(Exception(body?.error ?: "Invalid OTP"))
@@ -76,8 +85,12 @@ class AuthRepositoryImpl @Inject constructor(
                         // Non-fatal, proceed to sign out even if clearing token fails locally
                     }
                 }
-                
+
                 supabaseAuthDataSource.signOut()
+                
+                // 🚀 FIX: Clear meId on logout to disable notifications for logged out user
+                authPreferencesManager.setMeId("")
+                
                 Result.success(Unit)
             } catch (e: Exception) {
                 Result.failure(e)

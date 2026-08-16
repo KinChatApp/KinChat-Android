@@ -11,14 +11,7 @@ import io.github.jan.supabase.gotrue.auth
 import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.postgrest.rpc
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.flowOn
-import kotlinx.coroutines.flow.launchIn
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.onEach
-import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -49,33 +42,21 @@ class ContactsViewModel @Inject constructor(
 
     private fun observeContacts() {
         contactsUseCases.getContacts()
-            // Offload heavy list mapping and regex operations to Default dispatcher (CPU intensive)
             .map { contacts ->
                 val uniqueRegistered = contacts
                     .filter { it.registeredUserId != null }
                     .associateBy { contact ->
                         val phoneDigits = contact.contactPhoneNormalized.replace(NON_DIGIT_REGEX, "")
-                        if (phoneDigits.length >= 10) {
-                            phoneDigits.takeLast(10)
-                        } else {
-                            contact.registeredUserId ?: (contact.id ?: contact.hashCode().toString())
-                        }
-                    }
-                    .values
-                    .toList()
+                        if (phoneDigits.length >= 10) phoneDigits.takeLast(10) else contact.registeredUserId ?: contact.id
+                    }.values.toList()
 
                 val unregistered = contacts.filter { it.registeredUserId == null }
-                
                 Pair(uniqueRegistered, unregistered)
             }
             .flowOn(Dispatchers.Default)
             .onEach { (registered, unregistered) ->
                 _uiState.update {
-                    it.copy(
-                        registeredContacts = registered,
-                        unregisteredContacts = unregistered,
-                        isLoading = false
-                    )
+                    it.copy(registeredContacts = registered, unregisteredContacts = unregistered, isLoading = false)
                 }
             }
             .launchIn(viewModelScope)
@@ -92,17 +73,11 @@ class ContactsViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isSyncing = true, errorMsg = null) }
             val result = contactsUseCases.syncDeviceContacts()
-            _uiState.update {
-                it.copy(
-                    isSyncing = false,
-                    errorMsg = result.errorMessage
-                )
-            }
+            _uiState.update { it.copy(isSyncing = false, errorMsg = result.errorMessage) }
         }
     }
 
     fun openChatWithUser(partnerUserId: String) {
-        // Run network operation on IO dispatcher
         viewModelScope.launch(Dispatchers.IO) {
             _uiState.update { it.copy(isLoading = true, errorMsg = null) }
             try {
@@ -137,7 +112,6 @@ class ContactsViewModel @Inject constructor(
 
     companion object {
         private const val TAG = "ContactsViewModel"
-        // Pre-compiled regex to avoid object creation inside loops
         private val NON_DIGIT_REGEX = Regex("\\D")
     }
 }

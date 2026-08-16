@@ -2,8 +2,9 @@ package com.kinchat.app.data.repository.chat
 
 import com.kinchat.app.data.local.db.*
 import java.util.UUID
+import javax.inject.Inject
 
-class ChatMessageDbHelper(
+class ChatMessageDbHelper @Inject constructor(
     private val chatDao: ChatDao,
     private val pendingOperationDao: PendingOperationDao
 ) {

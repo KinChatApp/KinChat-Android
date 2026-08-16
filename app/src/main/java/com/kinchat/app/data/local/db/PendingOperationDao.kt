@@ -14,8 +14,13 @@ interface PendingOperationDao {
     @Update
     suspend fun updateOperation(operation: PendingOperationEntity)
 
-    @Query("SELECT * FROM pending_operations ORDER BY createdAt ASC")
+    // 🚀 FIX: Exclude DEAD operations and order by sequence for deterministic FIFO execution
+    @Query("SELECT * FROM pending_operations WHERE status != 'DEAD' ORDER BY sequence ASC, createdAt ASC")
     suspend fun getAllPendingOperations(): List<PendingOperationEntity>
+
+    // 🚀 FIX: Get next sequence number for maintaining order
+    @Query("SELECT IFNULL(MAX(sequence), 0) + 1 FROM pending_operations")
+    suspend fun getNextSequence(): Long
 
     @Query("DELETE FROM pending_operations WHERE id = :id")
     suspend fun deleteOperation(id: String)

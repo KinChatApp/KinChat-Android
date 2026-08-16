@@ -38,18 +38,21 @@ class KinChatMessagingService : FirebaseMessagingService() {
         }
     }
 
-    // 🚀 FIX (Preserved): WakeLock is held manually until notify() ends or times out.
-    // This prevents CPU Doze mode or aggressive OS freezing (like Vivo) from 
-    // terminating the process before the notification is properly shown.
     override fun onMessageReceived(remoteMessage: RemoteMessage) {
         super.onMessageReceived(remoteMessage)
 
         Log.d(TAG, "Message received from FCM: ${remoteMessage.data}")
 
+        // 🚀 FIX: Ignore ZegoCloud payloads so it doesn't interrupt custom chat messages
+        if (remoteMessage.data.toString().contains("zego")) {
+            Log.d(TAG, "ZegoCloud payload detected. Ignoring in custom FCM processor.")
+            return
+        }
+
         val payload = FcmMessagePayload.from(remoteMessage.data) ?: return
-        
+
         val wakeLock = wakeLockManager.acquireWakeLock(
-            tag = WAKE_LOCK_TAG, 
+            tag = WAKE_LOCK_TAG,
             timeoutMs = WORK_TIMEOUT_MS + WAKE_LOCK_SAFETY_MARGIN_MS
         )
 
@@ -60,7 +63,6 @@ class KinChatMessagingService : FirebaseMessagingService() {
                     true
                 }
 
-                // If DB/Network response times out, show a fallback notification
                 if (handled == null) {
                     messageProcessor.showFallbackNotification(payload)
                 }

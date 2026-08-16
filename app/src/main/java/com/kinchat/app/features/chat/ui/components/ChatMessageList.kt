@@ -41,16 +41,21 @@ fun ChatMessageList(
     onMessageAction: (MessageAction) -> Unit
 ) {
     val scope = rememberCoroutineScope()
-    val showScrollToBottom by remember { derivedStateOf { listState.firstVisibleItemIndex > 3 } }
+    
+    // ইউজার লিস্টের শেষে না থাকলে ফ্লোটিং বাটন দেখাবে
+    val showScrollToBottom by remember { 
+        derivedStateOf { 
+            val layoutInfo = listState.layoutInfo
+            val visibleItems = layoutInfo.visibleItemsInfo
+            if (visibleItems.isEmpty()) false
+            else visibleItems.last().index < chatItems.size - 2
+        } 
+    }
 
-    // Only auto-scroll to the newest message when the user is already at (or
-    // essentially at) the newest message. Never yank the list while the user is
-    // reading older messages.
-    val isNearNewest by remember { derivedStateOf { listState.firstVisibleItemIndex <= 1 } }
-
-    LaunchedEffect(messagesCount) {
-        if (messagesCount > 0 && isNearNewest) {
-            listState.scrollToItem(0)
+    // নতুন মেসেজ এলে অটোমেটিক একদম নিচের মেসেজে স্ক্রল করবে
+    LaunchedEffect(messagesCount, chatItems.size) {
+        if (chatItems.isNotEmpty()) {
+            listState.animateScrollToItem(chatItems.size - 1)
         }
     }
 
@@ -75,7 +80,6 @@ fun ChatMessageList(
                         message = item.uiModel,
                         isSelected = selectedMessages.contains(item.uiModel.id),
                         isSelectionModeEnabled = isSelectionMode,
-                        showReactionPicker = selectedMessages.size == 1,
                         onSelect = { onMessageSelect(item.uiModel.id) },
                         onAction = onMessageAction
                     )
@@ -94,7 +98,13 @@ fun ChatMessageList(
         exit = fadeOut() + scaleOut()
     ) {
         SmallFloatingActionButton(
-            onClick = { scope.launch { listState.animateScrollToItem(0) } },
+            onClick = { 
+                scope.launch { 
+                    if (chatItems.isNotEmpty()) {
+                        listState.animateScrollToItem(chatItems.size - 1) 
+                    }
+                } 
+            },
             containerColor = MaterialTheme.colorScheme.primaryContainer,
             contentColor = MaterialTheme.colorScheme.onPrimaryContainer
         ) {

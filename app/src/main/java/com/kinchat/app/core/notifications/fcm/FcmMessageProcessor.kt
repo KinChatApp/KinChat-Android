@@ -4,6 +4,9 @@ import android.content.Context
 import com.kinchat.app.core.notifications.fcm.model.FcmMessagePayload
 import com.kinchat.app.core.notifications.builder.NotificationHelper
 import com.kinchat.app.data.local.datastore.AuthPreferencesManager
+import com.kinchat.app.data.local.db.ChatMessageDao
+import com.kinchat.app.data.local.db.ChatMessageEntity
+import com.kinchat.app.data.local.db.MessageStatus
 import com.kinchat.app.domain.model.ChatMessage
 import com.kinchat.app.domain.repository.ChatRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -18,6 +21,7 @@ import javax.inject.Singleton
 class FcmMessageProcessor @Inject constructor(
     @ApplicationContext private val context: Context,
     private val chatRepository: ChatRepository,
+    private val chatMessageDao: ChatMessageDao,
     private val authPreferencesManager: AuthPreferencesManager
 ) {
     private val notificationHelper: NotificationHelper by lazy {
@@ -27,27 +31,30 @@ class FcmMessageProcessor @Inject constructor(
     suspend fun processAndNotify(payload: FcmMessagePayload) = withContext(Dispatchers.IO) {
         val currentUserId = authPreferencesManager.meId.firstOrNull() ?: return@withContext
 
-        // 🚀 FIX: নিজের পাঠানো মেসেজের push notification নিজেকে দেখানো বন্ধ (Echo Fix)
+        // 🚀 FIX: Echo Fix - do not show notification for own messages
         if (payload.senderId == currentUserId) {
             return@withContext
         }
 
+        // 🚀 FIX: Write incoming message to Room directly so it persists in background
+        try {
+            val newEntity = ChatMessageEntity(
+                id = payload.messageId,
+                chatId = payload.chatId,
+                senderId = payload.senderId,
+                content = payload.messageText,
+                createdAt = Instant.now().toEpochMilli(),
+                status = MessageStatus.DELIVERED,
+                isDeletedForMe = false
+            )
+            chatMessageDao.insertMessage(newEntity)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+
+        // Fetch recent messages for notification summary
         val allMessages = chatRepository.observeMessages(payload.chatId)
             .firstOrNull()?.toMutableList() ?: mutableListOf()
-
-        val isMessageAlreadyInDb = allMessages.any { it.id == payload.messageId }
-
-        if (!isMessageAlreadyInDb) {
-            allMessages.add(
-                ChatMessage(
-                    id = payload.messageId,
-                    chatId = payload.chatId,
-                    senderId = payload.senderId,
-                    content = payload.messageText,
-                    createdAt = Instant.now().toString()
-                )
-            )
-        }
 
         val recentMessages = allMessages.takeLast(MAX_RECENT_MESSAGES)
 

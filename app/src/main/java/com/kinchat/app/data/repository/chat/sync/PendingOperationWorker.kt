@@ -28,52 +28,65 @@ class PendingOperationWorker @AssistedInject constructor(
     override suspend fun doWork(): Result {
         val pendingOps = pendingOperationDao.getAllPendingOperations()
         DebugLogger.log(
-            applicationContext, 
-            "PendingWorker", 
+            applicationContext,
+            "PendingWorker",
             "doWork triggered, pendingOps=${pendingOps.size}, currentUserId=$currentUserId"
         )
-        
+
         if (pendingOps.isEmpty()) return Result.success()
-        
-        var hasFailure = false
-        
+
+        var hasRecoverableFailure = false
+        // 🚀 FIX: Track failed referenceIds to guarantee FIFO order across dependent ops (e.g. Send -> Edit -> Delete)
+        val failedReferenceIds = mutableSetOf<String>()
+
         for (op in pendingOps) {
+            if (failedReferenceIds.contains(op.referenceId)) {
+                Log.d("PendingWorker", "Skipping dependent op ${op.id} due to previous failure on ref ${op.referenceId}")
+                continue
+            }
+
             try {
                 // Dispatch the operation to the appropriate dedicated handler
                 operationDispatcher.dispatch(op)
-                
+
                 // If operation was handled successfully, remove it from the pending queue
                 pendingOperationDao.deleteOperation(op.id)
-                
+
             } catch (e: Exception) {
-                val errorMsg = e.message ?: ""
+                val errorMsg = e.message ?: "Unknown exception"
                 Log.e("PendingWorker", "Sync Failed: $errorMsg")
                 DebugLogger.log(
                     applicationContext,
                     "PendingWorker",
-                    "Sync Failed on type=${op.type} ref=${op.referenceId} retryCount=${op.retryCount}: $errorMsg",
+                    "Sync Failed on type=${op.type} ref=${op.referenceId} attempt=${op.attempt}: $errorMsg",
                     e
                 )
 
-                if (errorMsg.contains("invalid input syntax for type uuid")) {
-                    // Unrecoverable UUID format error; discard the operation
-                    pendingOperationDao.deleteOperation(op.id)
+                failedReferenceIds.add(op.referenceId)
+
+                // 🚀 FIX: Improve error categorization instead of relying solely on string matching
+                val isUnrecoverable = e is IllegalArgumentException || errorMsg.contains("invalid input syntax for type uuid")
+                
+                if (isUnrecoverable) {
+                    // Dead letter: Mark as DEAD immediately without further retries
+                    val deadOp = op.copy(status = "DEAD", lastError = errorMsg)
+                    pendingOperationDao.updateOperation(deadOp)
                 } else {
-                    // Recoverable error, increment retry count and mark for retry
-                    hasFailure = true
-                    val updatedOp = op.incrementRetryCount()
+                    // Recoverable error: Increment attempt and check maxAttempts
+                    hasRecoverableFailure = true
+                    val updatedOp = op.incrementAttempt(errorMsg)
                     pendingOperationDao.updateOperation(updatedOp)
                 }
             }
         }
 
-        val finalResult = if (hasFailure) Result.retry() else Result.success()
+        val finalResult = if (hasRecoverableFailure) Result.retry() else Result.success()
         DebugLogger.log(
-            applicationContext, 
-            "PendingWorker", 
-            "doWork finished: ${if (hasFailure) "RETRY" else "SUCCESS"}"
+            applicationContext,
+            "PendingWorker",
+            "doWork finished: ${if (hasRecoverableFailure) "RETRY" else "SUCCESS"}"
         )
-        
+
         return finalResult
     }
 }

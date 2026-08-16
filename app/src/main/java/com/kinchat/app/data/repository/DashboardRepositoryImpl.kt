@@ -40,7 +40,7 @@ class DashboardRepositoryImpl @Inject constructor(
         chatMessageDao = chatMessageDao
     )
 
-    override suspend fun getCurrentUserId(): String? = 
+    override suspend fun getCurrentUserId(): String? =
         supabase.auth.currentUserOrNull()?.id
 
     override suspend fun getUserProfile(userId: String): UserProfile? {
@@ -48,26 +48,23 @@ class DashboardRepositoryImpl @Inject constructor(
             val dto = supabase.postgrest[DashboardConstants.DB_TABLE_USERS]
                 .select { filter { eq(DashboardConstants.DB_FIELD_ID, userId) } }
                 .decodeSingleOrNull<UserProfileDto>()
-                
+
             dto?.let { UserProfile(id = it.id, avatarUrl = it.avatarUrl) }
-        } catch (e: Exception) { 
-            null 
+        } catch (e: Exception) {
+            null
         }
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
     override fun getRecentChats(): Flow<List<Chat>> {
-        // Wait for session readiness and initiate flow with user ID
         return supabase.auth.sessionStatus
             .filterIsInstance<SessionStatus.Authenticated>()
             .mapNotNull { it.session.user?.id }
             .flatMapLatest { currentUserId ->
-                // 1. Sync remote chat data in background
-                safeScope.launch { 
-                    syncManager.syncDashboardChats(currentUserId) 
+                safeScope.launch {
+                    syncManager.syncDashboardChats(currentUserId)
                 }
 
-                // 2. Supply UI with Room Database Flow
                 chatDao.observeAllChatsFlow(currentUserId).map { previews ->
                     previews.map { it.toDomainModel(currentUserId) }
                 }

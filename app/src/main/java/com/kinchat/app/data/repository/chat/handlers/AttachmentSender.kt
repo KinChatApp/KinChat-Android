@@ -18,7 +18,7 @@ import java.util.UUID
 class AttachmentSender(
     private val chatMessageDao: ChatMessageDao,
     private val attachmentDao: AttachmentDao,
-    private val uploader: CloudinaryUploader,
+    private val uploader: CloudinaryUploader, // Hilt DI না ভাঙার জন্য রাখা হলো
     private val dbHelper: ChatMessageDbHelper
 ) {
     suspend fun sendAttachmentMessage(
@@ -52,7 +52,7 @@ class AttachmentSender(
             createdAt = timestamp
         )
         chatMessageDao.insertMessage(entity)
-
+        
         val attachmentId = UUID.randomUUID().toString()
         val attachment = AttachmentEntity(
             id = attachmentId,
@@ -63,38 +63,21 @@ class AttachmentSender(
             fileSize = fileSize,
             createdAt = timestamp,
             localUri = localUri,
-            uploadState = UploadState.UPLOADING
+            uploadState = UploadState.PENDING // 🚀 FIXED: UPLOADING এর বদলে PENDING রাখা হলো
         )
         attachmentDao.insertAttachment(attachment)
 
         dbHelper.ensureChatExistsAndUpdateLastMessage(chatId, senderId, messageId, timestamp)
 
-        val uploadFolder = "kinchat_attachments/$chatId"
-
-        try {
-            val uploadResponse = uploader.uploadFile(Uri.parse(localUri), uploadFolder)
-            val secureUrl = uploadResponse["secure_url"].toString()
-            val publicId = uploadResponse["public_id"].toString()
-
-            AppLogger.i("AttachmentSender", "🎉 [3/3] Upload SUCCESS! URL: $secureUrl")
-
-            val updatedAttachment = attachment.copy(
-                fileUrl = secureUrl,
-                imageKitFileId = publicId,
-                uploadState = enumValueOf<UploadState>("SUCCESS")
-            )
-            attachmentDao.insertAttachment(updatedAttachment)
-            
-            dbHelper.queuePendingOperation(OperationType.SEND_MESSAGE, messageId, null, System.currentTimeMillis())
-            AppLogger.i("AttachmentSender", "✅ SEND_MESSAGE queued")
-        } catch (e: Exception) {
-            val errorMessage = if (e is TimeoutCancellationException) "⏱️ Upload timed out" else "❌ Upload failed: ${e.message}"
-            AppLogger.e("AttachmentSender", errorMessage, e)
-            attachmentDao.insertAttachment(attachment.copy(uploadState = enumValueOf<UploadState>("FAILED")))
-            throw e
-        }
+        // 🚀 FIXED (Phase 4): Queue UPLOAD_ATTACHMENT operation immediately offline!
+        // chatId এবং attachmentId দুটোই payload এ পাঠানো হচ্ছে যেন Worker ফোল্ডার পাথ ঠিকমত পায়।
+        val payload = "$chatId|$attachmentId"
+        dbHelper.queuePendingOperation(OperationType.UPLOAD_ATTACHMENT, messageId, payload, timestamp)
+        
+        AppLogger.i("AttachmentSender", "✅ UPLOAD_ATTACHMENT queued offline")
+        
     }.onSuccess {
-        AppLogger.i("AttachmentSender", "✅ Attachment message processed successfully")
+        AppLogger.i("AttachmentSender", "✅ Attachment message processed successfully to outbox")
     }.onFailure {
         AppLogger.e("AttachmentSender", "❌ Failed to process attachment message", it)
     }

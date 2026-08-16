@@ -8,9 +8,10 @@ import androidx.room.TypeConverters
     entities = [
         UserEntity::class, ChatEntity::class, ChatParticipantEntity::class,
         ChatMessageEntity::class, AttachmentEntity::class, MessageReactionEntity::class,
-        DraftEntity::class, PendingOperationEntity::class, ChatInsightsEntity::class
+        DraftEntity::class, PendingOperationEntity::class, ChatInsightsEntity::class,
+        UserSettingsEntity::class, ContactEntity::class, UserBlockEntity::class // 🚀 FIX: Added new entities for offline read paths
     ],
-    version = 4, // 🚀 Incremented version to apply schema changes
+    version = 5,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -24,4 +25,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun draftDao(): DraftDao
     abstract fun pendingOperationDao(): PendingOperationDao
     abstract fun chatInsightsDao(): ChatInsightsDao
+    // 🚀 FIX: Added DAOs for offline features
+    abstract fun userSettingsDao(): UserSettingsDao
+    abstract fun contactDao(): ContactDao
+    abstract fun userBlockDao(): UserBlockDao
 }

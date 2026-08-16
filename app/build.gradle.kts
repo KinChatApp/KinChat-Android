@@ -1,3 +1,13 @@
+import java.util.Properties
+import java.io.FileInputStream
+
+// local.properties থেকে ডেটা রিড করার সেটআপ
+val localProperties = Properties()
+val localPropertiesFile = rootProject.file("local.properties")
+if (localPropertiesFile.exists()) {
+    localProperties.load(FileInputStream(localPropertiesFile))
+}
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -15,10 +25,10 @@ android {
     namespace = "com.kinchat.app"
     compileSdk = 34
 
-    defaultConfig {
+    defaultConfig {                                                                                          
         applicationId = "com.kinchat.app"
         minSdk = 26
-        targetSdk = 34
+        targetSdk = 34                                                                                       
         versionCode = 1
         versionName = "1.0"
 
@@ -27,10 +37,17 @@ android {
             useSupportLibrary = true
         }
 
-        buildConfigField("String", "SUPABASE_URL", "\"https://iwafvjvelsfrdfbjcmsg.supabase.co\"")
-        buildConfigField("String", "SUPABASE_ANON_KEY", "\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml3YWZ2anZlbHNmcmRmYmpjbXNnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEyNzM0ODgsImV4cCI6MjA5Njg0OTQ4OH0.13nCDbbBSjItdXjc4qZeIFCtrvXaoO1q2Xxlq3bN6rw\"")
-        buildConfigField("String", "UPSTASH_REDIS_REST_URL", "\"https://your-redis-url.upstash.io\"")
-        buildConfigField("String", "UPSTASH_REDIS_REST_TOKEN", "\"your-redis-token\"")
+        // Supabase Config (local.properties থেকে আসবে)
+        buildConfigField("String", "SUPABASE_URL", "\"${localProperties.getProperty("SUPABASE_URL", "")}\"")
+        buildConfigField("String", "SUPABASE_ANON_KEY", "\"${localProperties.getProperty("SUPABASE_ANON_KEY", "")}\"")
+        
+        // Upstash Redis Config (local.properties থেকে আসবে)
+        buildConfigField("String", "UPSTASH_REDIS_REST_URL", "\"${localProperties.getProperty("UPSTASH_REDIS_REST_URL", "")}\"")
+        buildConfigField("String", "UPSTASH_REDIS_REST_TOKEN", "\"${localProperties.getProperty("UPSTASH_REDIS_REST_TOKEN", "")}\"")
+
+        // ZegoCloud Config (local.properties থেকে আসবে)
+        buildConfigField("Long", "ZEGO_APP_ID", "${localProperties.getProperty("ZEGO_APP_ID", "0")}L")
+        buildConfigField("String", "ZEGO_APP_SIGN", "\"${localProperties.getProperty("ZEGO_APP_SIGN", "")}\"")
     }
 
     buildTypes {
@@ -74,6 +91,9 @@ dependencies {
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.navigation:navigation-compose:2.7.7")
+    
+    // 🚀 AppCompat (Added for ZegoCloud UI compatibility)
+    implementation("androidx.appcompat:appcompat:1.6.1")
 
     // UI Extras
     implementation("androidx.compose.material:material-icons-extended")
@@ -130,4 +150,7 @@ dependencies {
 
     // Cloudinary SDK (Replaced ImageKit)
     implementation("com.cloudinary:cloudinary-android:2.5.0")
+    
+    // ZegoCloud Call UIKit
+    implementation("com.github.ZEGOCLOUD:zego_uikit_prebuilt_call_android:+")
 }

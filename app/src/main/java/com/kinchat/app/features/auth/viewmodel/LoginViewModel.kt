@@ -3,7 +3,9 @@ package com.kinchat.app.features.auth.viewmodel
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.kinchat.app.data.local.datastore.AuthPreferencesManager
 import com.kinchat.app.data.local.datastore.UserPreferencesManager
+import com.kinchat.app.data.source.auth.SupabaseAuthDataSource
 import com.kinchat.app.domain.repository.AuthRepository
 import com.kinchat.app.domain.repository.RequestOtpResult
 import com.kinchat.app.features.auth.domain.provider.FcmTokenProvider
@@ -20,6 +22,8 @@ import javax.inject.Inject
 class LoginViewModel @Inject constructor(
     private val repository: AuthRepository,
     private val userPreferencesManager: UserPreferencesManager,
+    private val authPreferencesManager: AuthPreferencesManager, // INJECTED
+    private val supabaseAuthDataSource: SupabaseAuthDataSource, // INJECTED for fetching ID
     private val fcmTokenProvider: FcmTokenProvider
 ) : ViewModel() {
 
@@ -45,9 +49,9 @@ class LoginViewModel @Inject constructor(
 
     fun updateOtp(otp: String) {
         val cleanOtp = PhoneFormatter.cleanOtp(otp)
-        
-        if (_uiState.value.otp == cleanOtp) return 
-        
+
+        if (_uiState.value.otp == cleanOtp) return
+
         _uiState.update { it.copy(otp = cleanOtp, error = null) }
 
         if (PhoneFormatter.isOtpValid(cleanOtp) && !_uiState.value.isLoading) {
@@ -96,6 +100,11 @@ class LoginViewModel @Inject constructor(
             )
 
             if (result.isSuccess) {
+                // 🚀 FIX: Ensure meId is updated in ViewModel post-auth as requested
+                supabaseAuthDataSource.getCurrentUserId()?.let { userId ->
+                    authPreferencesManager.setMeId(userId)
+                }
+
                 syncFcmToken()
                 _uiState.update { it.copy(isLoading = false, isSuccess = true) }
             } else {

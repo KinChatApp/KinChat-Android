@@ -59,11 +59,6 @@ class ChatSetupUseCase @Inject constructor(
                     // Treat passedId as User ID
                     partnerId = passedId
 
-                    // 🚀 FIXED: আগে এখানে "chats" আর "chat_participants"-এ আলাদা আলাদা manual insert
-                    // করা হতো। এটা silently fail করলে actualChatId কখনো আপডেট হতো না — ফলে partner-এর
-                    // user_id-কেই ভুলভাবে chat_id হিসেবে ব্যবহার হয়ে যেত (মূল বাগ)। এখন একই নির্ভরযোগ্য
-                    // RPC ব্যবহার করা হচ্ছে যেটা ContactsViewModel.openChatWithUser()-এও কাজ করছে —
-                    // এটা reliably দুইজনের chat + participants রো একসাথে তৈরি করে।
                     val response = supabaseClient.postgrest.rpc(
                         "create_chat_if_not_exists",
                         mapOf("user1_id" to currentUserId, "user2_id" to partnerId)
@@ -78,9 +73,14 @@ class ChatSetupUseCase @Inject constructor(
 
             } catch (e: Exception) {
                 e.printStackTrace()
-                // 🚀 FIXED: আগে এই catch ব্লকের পরও পুরনো (ভুল) actualChatId নিয়ে ফাংশন রিটার্ন করত।
-                // এখন fail হলে null রিটার্ন করা হচ্ছে, যেন কখনো ভুল chat_id দিয়ে চ্যাট শুরু না হয়।
-                return null
+                // 🚀 FIXED (Phase 3): Return offline fallback data instead of null.
+                // This ensures offline chat reads are not blocked by a failed network request.
+                return ChatSetupResult(
+                    actualChatId = passedId,
+                    partnerId = passedId,
+                    partnerName = partnerName ?: "Unknown",
+                    currentUserId = currentUserId
+                )
             }
         }
 

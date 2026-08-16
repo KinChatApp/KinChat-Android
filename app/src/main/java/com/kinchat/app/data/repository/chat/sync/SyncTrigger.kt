@@ -7,12 +7,6 @@ import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 
-/**
- * 🚀 NEW: PendingOperationWorker ট্রিগার করার কমন লজিক এক জায়গায় আনা হলো।
- * আগে এই লজিক শুধু ChatRepositoryImpl-এর private মেথডে ডুপ্লিকেট ছিল; এখন
- * ChatRepositoryImpl এবং KinChatMessagingService দুটোই একই কনফিগারেশনে
- * sync worker enqueue করতে পারবে (DRY)।
- */
 object SyncTrigger {
     fun enqueue(context: Context) {
         val constraints = Constraints.Builder()
@@ -25,7 +19,8 @@ object SyncTrigger {
 
         WorkManager.getInstance(context).enqueueUniqueWork(
             "SyncPendingOperations",
-            ExistingWorkPolicy.REPLACE,
+            // 🚀 FIX: Prevent cancelling in-flight worker by using KEEP instead of REPLACE
+            ExistingWorkPolicy.KEEP,
             workRequest
         )
     }

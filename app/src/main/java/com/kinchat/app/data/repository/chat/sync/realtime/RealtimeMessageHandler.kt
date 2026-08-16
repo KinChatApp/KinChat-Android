@@ -1,6 +1,7 @@
 package com.kinchat.app.data.repository.chat.sync.realtime
 
 import com.kinchat.app.data.local.db.ChatMessageDao
+import com.kinchat.app.data.local.db.MessageStatus
 import com.kinchat.app.data.repository.chat.sync.mapper.ChatSyncMapper
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.gotrue.auth
@@ -21,37 +22,35 @@ class RealtimeMessageHandler @Inject constructor(
             is PostgresAction.Insert -> handleInsert(action.record, chatId)
             is PostgresAction.Update -> handleUpdate(action.record, chatId)
             is PostgresAction.Delete -> handleDelete(action.oldRecord)
-            else -> {
-                // Ignore unhandled Postgres actions
-            }
+            else -> {}
         }
     }
 
     private suspend fun handleInsert(record: JsonObject, chatId: String) {
-        if (record[COLUMN_SENDER_ID]?.jsonPrimitive?.content != currentUserId) {
-            ChatSyncMapper.mapJsonToEntity(record, chatId)?.let { entity ->
-                chatMessageDao.insertMessage(entity)
-            }
+        // Echo fix: Still process own messages through merge to confirm server delivery
+        ChatSyncMapper.mapJsonToEntity(record, chatId)?.let { entity ->
+            chatMessageDao.upsertMessageMerged(entity) // 🚀 FIX: Use merge instead of overwrite
         }
     }
 
     private suspend fun handleUpdate(record: JsonObject, chatId: String) {
-        if (record[COLUMN_SENDER_ID]?.jsonPrimitive?.content != currentUserId) {
-            ChatSyncMapper.mapJsonToEntity(record, chatId)?.let { entity ->
-                chatMessageDao.insertMessage(entity)
-            }
+        ChatSyncMapper.mapJsonToEntity(record, chatId)?.let { entity ->
+            chatMessageDao.upsertMessageMerged(entity) // 🚀 FIX: Use merge instead of overwrite
         }
     }
 
     private suspend fun handleDelete(oldRecord: JsonObject) {
         val deletedId = oldRecord[COLUMN_ID]?.jsonPrimitive?.content
         if (deletedId != null) {
-            chatMessageDao.softDeleteMessage(deletedId, System.currentTimeMillis())
+            val localMsg = chatMessageDao.getMessageById(deletedId)
+            // 🚀 FIX: Don't soft-delete if it's currently pending/sent locally
+            if (localMsg != null && localMsg.status != MessageStatus.PENDING && localMsg.status != MessageStatus.SENT) {
+                chatMessageDao.softDeleteMessage(deletedId, System.currentTimeMillis())
+            }
         }
     }
 
     companion object {
         private const val COLUMN_ID = "id"
-        private const val COLUMN_SENDER_ID = "sender_id"
     }
 }

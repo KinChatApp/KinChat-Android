@@ -21,7 +21,7 @@ import javax.inject.Inject
 
 @HiltViewModel
 class ChatViewModel @Inject constructor(
-    @ApplicationContext private val context: Context, // 🚀 Added Context for URI resolving
+    @ApplicationContext private val context: Context,
     private val chatRepository: ChatRepository,
     private val chatSetupUseCase: ChatSetupUseCase
 ) : ViewModel() {
@@ -68,13 +68,22 @@ class ChatViewModel @Inject constructor(
             } else {
                 _partnerState.value = PartnerUiState.Loading
             }
-            _messages.value = emptyList()
+            
+            // 🚀 FIXED (Phase 3): Removed `_messages.value = emptyList()` to prevent UI flashing.
+            currentChatId = passedId
 
+            // 🚀 FIXED (Phase 3): Start observing Room IMMEDIATELY for offline support
+            var roomObserveJob = launch {
+                observeMessagesForChat(passedId)
+            }
+
+            // Execute network setup in background
             val setupResult = chatSetupUseCase.execute(passedId, quickName)
 
             if (setupResult != null) {
                 currentUserId = setupResult.currentUserId
-                currentChatId = setupResult.actualChatId
+                val resolvedChatId = setupResult.actualChatId
+                currentChatId = resolvedChatId
                 AppLogger.d("ChatVM", "Chat setup complete. actualChatId: $currentChatId, currentUserId: $currentUserId")
 
                 if (setupResult.partnerName != null) {
@@ -83,23 +92,16 @@ class ChatViewModel @Inject constructor(
                         name = setupResult.partnerName
                     )
                 } else {
-                    _partnerState.value = PartnerUiState.Error
+                    // Fallback to error only if we have no prior name
+                    if (quickName.isNullOrBlank()) _partnerState.value = PartnerUiState.Error
                 }
 
-                try {
-                    chatRepository.observeMessages(setupResult.actualChatId).collectLatest { msgs ->
-                        _messages.value = msgs.distinctBy { it.id }.filter { msg ->
-                            msg.deletedForUsers?.contains(currentUserId) != true
-                        }
-                        if (currentUserId.isNotEmpty()) {
-                            chatRepository.updateLastRead(setupResult.actualChatId, currentUserId)
-                        }
+                // If actual chat ID from backend is different, re-observe Room with the correct ID
+                if (resolvedChatId != passedId) {
+                    roomObserveJob.cancel()
+                    roomObserveJob = launch {
+                        observeMessagesForChat(resolvedChatId)
                     }
-                } catch (e: kotlinx.coroutines.CancellationException) {
-                    // Coroutine Cancel হলে থ্রো করে দিন, এটি নরমাল বিহেভিয়র
-                    throw e
-                } catch (e: Exception) {
-                    AppLogger.e("ChatVM", "Error observing messages for ${setupResult.actualChatId}", e)
                 }
             } else {
                 AppLogger.w("ChatVM", "Chat Setup Failed! Result is null.")
@@ -107,6 +109,23 @@ class ChatViewModel @Inject constructor(
                     _partnerState.value = PartnerUiState.Error
                 }
             }
+        }
+    }
+
+    private suspend fun observeMessagesForChat(chatId: String) {
+        try {
+            chatRepository.observeMessages(chatId).collectLatest { msgs ->
+                _messages.value = msgs.distinctBy { it.id }.filter { msg ->
+                    msg.deletedForUsers?.contains(currentUserId) != true
+                }
+                if (currentUserId.isNotEmpty()) {
+                    chatRepository.updateLastRead(chatId, currentUserId)
+                }
+            }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            AppLogger.e("ChatVM", "Error observing messages for $chatId", e)
         }
     }
 
@@ -140,7 +159,6 @@ class ChatViewModel @Inject constructor(
         }
     }
 
-    // 🚀 New function to process and send Media/Attachments
     fun sendAttachment(uri: Uri, replyToId: String? = null, caption: String? = null) {
         val chatId = currentChatId ?: return
         if (currentUserId.isEmpty()) return
@@ -175,7 +193,6 @@ class ChatViewModel @Inject constructor(
             var fileName = "attachment_${System.currentTimeMillis()}"
             var fileSize = 0L
 
-            // Extract File Metadata (Name & Size)
             contentResolver.query(uri, null, null, null, null)?.use { cursor ->
                 val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
                 val sizeIndex = cursor.getColumnIndex(OpenableColumns.SIZE)
@@ -205,10 +222,8 @@ class ChatViewModel @Inject constructor(
     }
 
     private fun cleanupCameraCacheFile(uri: Uri) {
-        // Remove one-shot camera captures from cache after a successful upload.
         try {
             if (uri.scheme != "content" || uri.authority != "${context.packageName}.fileprovider") return
-            // FileProvider cache-path "camera_images" maps to cacheDir/camera_images/<name>
             val fileName = uri.lastPathSegment ?: return
             if (fileName.isBlank() || !fileName.startsWith("IMG_")) return
             val file = File(File(context.cacheDir, "camera_images"), fileName)
