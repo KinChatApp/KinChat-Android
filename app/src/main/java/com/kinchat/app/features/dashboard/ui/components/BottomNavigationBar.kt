@@ -30,8 +30,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.kinchat.app.core.designsystem.BrandPrimary
-import com.kinchat.app.core.designsystem.MutedForegroundLight
 
 @Composable
 fun BottomNavigationBar(
@@ -43,7 +41,7 @@ fun BottomNavigationBar(
 ) {
     NavigationBar(
         containerColor = MaterialTheme.colorScheme.background,
-        contentColor = MutedForegroundLight,
+        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
         tonalElevation = 0.dp
     ) {
         val tabs = listOf(
@@ -84,7 +82,7 @@ fun BottomNavigationBar(
                             Box(
                                 modifier = Modifier
                                     .size(4.dp)
-                                    .background(BrandPrimary, CircleShape)
+                                    .background(MaterialTheme.colorScheme.primary, CircleShape)
                             )
                         } else {
                             Spacer(modifier = Modifier.size(4.dp))
@@ -92,10 +90,10 @@ fun BottomNavigationBar(
                     }
                 },
                 colors = NavigationBarItemDefaults.colors(
-                    selectedIconColor = BrandPrimary,
-                    selectedTextColor = BrandPrimary,
-                    unselectedIconColor = MutedForegroundLight,
-                    unselectedTextColor = MutedForegroundLight,
+                    selectedIconColor = MaterialTheme.colorScheme.primary,
+                    selectedTextColor = MaterialTheme.colorScheme.primary,
+                    unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
                     indicatorColor = Color.Transparent
                 )
             )

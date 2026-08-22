@@ -13,20 +13,22 @@ class MessageActionManager(
     private val savedMessagesCache = ConcurrentHashMap<String, Boolean>()
 
     suspend fun deleteMessage(messageId: String, userId: String, deleteType: String): Result<Unit> = runCatching {
-        AppLogger.d("MessageActionManager", "Soft deleting message: $messageId")
+        AppLogger.d("MessageActionManager", "Deleting message: $messageId, type: $deleteType")
         val timestamp = System.currentTimeMillis()
-        chatMessageDao.softDeleteMessage(messageId, timestamp)
-
+        
         if (deleteType == "for_everyone") {
+            chatMessageDao.markAsDeletedForEveryone(messageId, timestamp)
             dbHelper.queuePendingOperation(OperationType.DELETE_MESSAGE, messageId, null, timestamp)
+        } else {
+            chatMessageDao.softDeleteForMe(messageId)
         }
     }.onFailure {
         AppLogger.e("MessageActionManager", "Failed to delete message", it)
     }
 
     suspend fun toggleSaveMessage(messageId: String, userId: String): Result<Boolean> = Result.success(true)
-    
+
     suspend fun checkIsSaved(messageId: String, userId: String): Boolean = false
-    
+
     suspend fun reportMessage(messageId: String, reporterId: String, reportedUserId: String, reason: String): Result<Unit> = Result.success(Unit)
 }

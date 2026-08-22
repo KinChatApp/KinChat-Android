@@ -1,7 +1,6 @@
 package com.kinchat.app.data.repository.chat.sync.realtime
 
 import com.kinchat.app.data.local.db.ChatMessageDao
-import com.kinchat.app.data.local.db.MessageStatus
 import com.kinchat.app.data.repository.chat.sync.mapper.ChatSyncMapper
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.gotrue.auth
@@ -14,9 +13,6 @@ class RealtimeMessageHandler @Inject constructor(
     private val supabaseClient: SupabaseClient,
     private val chatMessageDao: ChatMessageDao
 ) {
-    private val currentUserId: String?
-        get() = supabaseClient.auth.currentUserOrNull()?.id
-
     suspend fun handleAction(action: PostgresAction, chatId: String) {
         when (action) {
             is PostgresAction.Insert -> handleInsert(action.record, chatId)
@@ -27,26 +23,24 @@ class RealtimeMessageHandler @Inject constructor(
     }
 
     private suspend fun handleInsert(record: JsonObject, chatId: String) {
-        // Echo fix: Still process own messages through merge to confirm server delivery
         ChatSyncMapper.mapJsonToEntity(record, chatId)?.let { entity ->
-            chatMessageDao.upsertMessageMerged(entity) // 🚀 FIX: Use merge instead of overwrite
+            chatMessageDao.upsertMessageMerged(entity)
         }
     }
 
     private suspend fun handleUpdate(record: JsonObject, chatId: String) {
         ChatSyncMapper.mapJsonToEntity(record, chatId)?.let { entity ->
-            chatMessageDao.upsertMessageMerged(entity) // 🚀 FIX: Use merge instead of overwrite
+            chatMessageDao.upsertMessageMerged(entity)
         }
     }
 
     private suspend fun handleDelete(oldRecord: JsonObject) {
         val deletedId = oldRecord[COLUMN_ID]?.jsonPrimitive?.content
         if (deletedId != null) {
-            val localMsg = chatMessageDao.getMessageById(deletedId)
-            // 🚀 FIX: Don't soft-delete if it's currently pending/sent locally
-            if (localMsg != null && localMsg.status != MessageStatus.PENDING && localMsg.status != MessageStatus.SENT) {
-                chatMessageDao.softDeleteMessage(deletedId, System.currentTimeMillis())
-            }
+            // 🚀 PRO-FIX: Trust the server. If a realtime delete event arrives with an ID we know,
+            // we must soft-delete it locally regardless of its local SENDING status, 
+            // as this implies the server successfully received it but it was subsequently deleted.
+            chatMessageDao.softDeleteMessage(deletedId, System.currentTimeMillis())
         }
     }
 

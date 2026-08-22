@@ -16,9 +16,9 @@ fun MessageBubble(
 ) {
     if (message.call != null) {
         CallBubble(
-            message = message, 
-            isSelected = isSelected, 
-            onSelect = { onSelect() }, 
+            message = message,
+            isSelected = isSelected,
+            onSelect = { onSelect() },
             onJoinCall = { onAction(MessageAction.JoinCall(message)) }
         )
     } else {
@@ -29,10 +29,10 @@ fun MessageBubble(
             showReactionPicker = showReactionPicker,
             onSelect = onSelect,
             onSwipeReply = { if (!message.status.isDeleted) onAction(MessageAction.Reply(message)) },
-            onReact = { reaction -> onAction(MessageAction.React(message.id, reaction)) }
+            onReact = { reaction -> if (!message.status.isDeleted) onAction(MessageAction.React(message.id, reaction)) }
         ) {
             BubbleContents(
-                message = message, 
+                message = message,
                 isSelectionModeEnabled = isSelectionModeEnabled,
                 onAction = onAction,
                 onSelect = onSelect // 🚀 অন-সিলেক্ট পাস করা হলো যেন টেক্সট থেকে ইভেন্ট পাঠানো যায়

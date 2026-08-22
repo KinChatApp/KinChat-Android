@@ -16,23 +16,62 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.kinchat.app.core.designsystem.LocalExtendedColors
 import com.kinchat.app.features.chat.ui.models.MessageUiModel
 
 @Composable
 fun TextContent(
-    message: MessageUiModel, 
-    isSelectionModeEnabled: Boolean, 
+    message: MessageUiModel,
+    isSelectionModeEnabled: Boolean,
     onSelect: () -> Unit
 ) {
-    val textColor = if (message.isMe) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
-    val linkColor = if (message.isMe) MaterialTheme.colorScheme.inversePrimary else MaterialTheme.colorScheme.primary
-    val uriHandler = LocalUriHandler.current
+    val extendedColors = LocalExtendedColors.current
     val haptic = LocalHapticFeedback.current
+
+    val textColor = if (message.isMe) {
+        extendedColors.bubbleSentText
+    } else {
+        extendedColors.bubbleReceivedText
+    }
+
+    // 🚀 1. ডিলিট হওয়া মেসেজের জন্য কাস্টম লজিক
+    if (message.status.isDeleted) {
+        val deletedText = if (message.isMe) "🚫 You deleted this message" else "🚫 This message was deleted"
+        
+        Text(
+            text = deletedText,
+            color = textColor.copy(alpha = 0.8f),
+            fontStyle = FontStyle.Italic,
+            fontSize = 15.sp,
+            modifier = Modifier
+                .padding(horizontal = 4.dp, vertical = 2.dp)
+                .pointerInput(message.id, isSelectionModeEnabled) {
+                    detectTapGestures(
+                        onLongPress = {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            onSelect()
+                        },
+                        onTap = {
+                            if (isSelectionModeEnabled) {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                onSelect()
+                            }
+                        }
+                    )
+                }
+        )
+        return // ডিলিট হলে আর নিচের নরমাল টেক্সট/লিংক রেন্ডার করবে না
+    }
+
+    // 🚀 2. নরমাল মেসেজের জন্য সাধারণ লজিক
+    val linkColor = if (message.isMe) extendedColors.bubbleSentText else extendedColors.linkColor
+    val uriHandler = LocalUriHandler.current
 
     val linkRegex = android.util.Patterns.WEB_URL.toRegex()
     val matchResult = linkRegex.find(message.content)
@@ -78,8 +117,8 @@ fun TextContent(
                                     annotatedString.getStringAnnotations(tag = "URL", start = offset, end = offset)
                                         .firstOrNull()?.let { annotation ->
                                             var url = annotation.item
-                                            if (!url.startsWith("http://") && !url.startsWith("https://")) { 
-                                                url = "https://$url" 
+                                            if (!url.startsWith("http://") && !url.startsWith("https://")) {
+                                                url = "https://$url"
                                             }
                                             try { uriHandler.openUri(url) } catch (e: Exception) {}
                                         }
@@ -94,9 +133,9 @@ fun TextContent(
         if (firstUrl != null) {
             Spacer(modifier = Modifier.height(8.dp))
             LinkPreviewWidget(
-                url = firstUrl, 
-                isMe = message.isMe, 
-                isSelectionModeEnabled = isSelectionModeEnabled, 
+                url = firstUrl,
+                isMe = message.isMe,
+                isSelectionModeEnabled = isSelectionModeEnabled,
                 onSelect = onSelect
             )
         }

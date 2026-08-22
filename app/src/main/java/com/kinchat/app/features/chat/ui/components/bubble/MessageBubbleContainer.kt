@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import com.kinchat.app.R
+import com.kinchat.app.core.designsystem.LocalExtendedColors
 import com.kinchat.app.domain.model.MessageType
 import com.kinchat.app.features.chat.ui.models.MessageUiModel
 import com.kinchat.app.features.chat.ui.components.bubble.gestures.SwipeToReplyBox
@@ -49,7 +50,7 @@ fun MessageBubbleContainer(
     )
 
     val selectionBgColor by animateColorAsState(
-        targetValue = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f) else Color.Transparent,
+        targetValue = if (isSelected) LocalExtendedColors.current.bubbleSelectedOverlay else Color.Transparent,
         label = "bgColor"
     )
 
@@ -87,7 +88,7 @@ fun MessageBubbleContainer(
             .padding(top = topPad, bottom = bottomPad, start = 12.dp, end = 12.dp),
         contentAlignment = if (message.isMe) Alignment.CenterEnd else Alignment.CenterStart
     ) {
-        val bubbleColor = if (message.isMe) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant
+        val bubbleColor = if (message.isMe) LocalExtendedColors.current.bubbleSentBackground else LocalExtendedColors.current.bubbleReceivedBackground
         val shape = rememberMessageBubbleShape(
             isMe = message.isMe,
             isTopInGroup = message.isTopInGroup,
@@ -133,7 +134,7 @@ fun MessageBubbleContainer(
                             if (message.status.isDeleted) {
                                 Text(
                                     text = stringResource(R.string.chat_message_deleted),
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                    color = if (message.isMe) LocalExtendedColors.current.bubbleSentText.copy(alpha = 0.7f) else LocalExtendedColors.current.bubbleReceivedText.copy(alpha = 0.7f),
                                     fontSize = 14.sp,
                                     modifier = Modifier.padding(horizontal = 4.dp)
                                 )

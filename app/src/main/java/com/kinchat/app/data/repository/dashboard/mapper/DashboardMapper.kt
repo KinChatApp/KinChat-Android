@@ -44,6 +44,7 @@ internal object DashboardMapper {
                 )
             )
 
+            // Current User Participant
             participants.add(
                 ChatParticipantEntity(
                     chatId = dto.chat_id,
@@ -60,6 +61,26 @@ internal object DashboardMapper {
                     isLocked = false
                 )
             )
+
+            // 🚀 FIX: Partner Participant (যাতে লোকাল কন্টাক্ট থেকে আইডি ম্যাচ করানো যায়)
+            if (!dto.other_user_id.isNullOrBlank() && dto.other_user_id != currentUserId) {
+                participants.add(
+                    ChatParticipantEntity(
+                        chatId = dto.chat_id,
+                        userId = dto.other_user_id,
+                        role = DashboardConstants.ROLE_MEMBER,
+                        joinedAt = currentTime,
+                        lastReadAt = null,
+                        clearedAt = null,
+                        unreadCount = 0,
+                        isPinned = false,
+                        isMuted = false,
+                        isArchived = false,
+                        isHidden = false,
+                        isLocked = false
+                    )
+                )
+            }
 
             if (!dto.last_message_content.isNullOrBlank()) {
                 messages.add(

@@ -16,8 +16,8 @@ fun MessageWithDetails.toDomainModel(): ChatMessage {
         content = this.message.content,
         type = this.message.type.name,
         createdAt = Instant.ofEpochMilli(this.message.createdAt).toString(),
-        editedAt = this.message.editedAt?.let { Instant.ofEpochMilli(it).toString() },
-        deletedAt = this.message.deletedAt?.let { Instant.ofEpochMilli(it).toString() },
+        editedAt = this.message.editedAt?.takeIf { it > 0 }?.let { Instant.ofEpochMilli(it).toString() },
+        deletedAt = this.message.deletedAt?.takeIf { it > 0 }?.let { Instant.ofEpochMilli(it).toString() },
         isForwarded = this.message.isForwarded,
         forwardedFromId = this.message.forwardedFromId,
         replyToId = this.message.replyToId,
@@ -39,7 +39,7 @@ fun MessageWithDetails.toDomainModel(): ChatMessage {
                 fileName = attachment.fileName,
                 fileSize = attachment.fileSize,
                 fileType = attachment.mimeType,
-                localUri = attachment.localUri, 
+                localUri = attachment.localUri,
                 uploadState = attachment.uploadState.name,
                 imageKitFileId = attachment.imageKitFileId
             )
@@ -50,10 +50,12 @@ fun MessageWithDetails.toDomainModel(): ChatMessage {
 
 fun ChatPreview.toDomainModel(currentUserId: String): Chat {
     val participantInfo = this.participants.firstOrNull { it.userId == currentUserId }
+    val partnerInfo = this.participants.firstOrNull { it.userId != currentUserId } // 🚀 FIX: অন্য ইউজারের ডেটা বের করা
 
     return Chat(
         id = this.chat.id,
         name = this.chat.title ?: "Unknown",
+        partnerId = partnerInfo?.userId, // 🚀 FIX: মডেলে পাঠানো
         lastMessage = this.lastMessage?.content ?: "Attachment",
         timestamp = this.chat.lastMessageTime ?: this.chat.updatedAt,
         unreadCount = participantInfo?.unreadCount ?: 0,

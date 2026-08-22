@@ -24,10 +24,10 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.kinchat.app.core.designsystem.LocalExtendedColors
 import com.kinchat.app.features.chat.info.domain.model.UserProfile
 import com.kinchat.app.features.chat.info.ui.utils.formatLastSeen
 import kotlinx.coroutines.delay
@@ -82,7 +82,7 @@ fun ChatInfoDetails(
                     Icon(
                         imageVector = if (isCopied) Icons.Default.Check else Icons.Default.ContentCopy,
                         contentDescription = "Copy Phone",
-                        tint = if (isCopied) Color(0xFF4CAF50) else MaterialTheme.colorScheme.onSurfaceVariant,
+                        tint = if (isCopied) LocalExtendedColors.current.presenceOnline else MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(18.dp)
                     )
                 }
@@ -95,7 +95,7 @@ fun ChatInfoDetails(
                 text = "Online",
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.Medium,
-                color = Color(0xFF4CAF50)
+                color = LocalExtendedColors.current.presenceOnline
             )
         } else {
             val lastSeenText = formatLastSeen(profile.last_seen)

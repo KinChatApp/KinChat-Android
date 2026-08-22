@@ -5,6 +5,8 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
 import com.cloudinary.android.MediaManager
@@ -14,9 +16,24 @@ import dagger.hilt.android.HiltAndroidApp
 import javax.inject.Inject
 import com.zegocloud.uikit.prebuilt.call.ZegoUIKitPrebuiltCallService
 import com.zegocloud.uikit.prebuilt.call.invite.ZegoUIKitPrebuiltCallInvitationConfig
+// OneSignal Imports
+import com.onesignal.OneSignal
+import com.onesignal.debug.LogLevel
+import com.onesignal.user.subscriptions.IPushSubscriptionObserver
+import com.onesignal.user.subscriptions.PushSubscriptionChangedState
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import java.util.concurrent.atomic.AtomicBoolean
 
 @HiltAndroidApp
 class KinChatApplication : Application(), Configuration.Provider {
+
+    // 🚀 NEW: Notification Extension-এ Context ব্যবহার করার জন্য
+    companion object {
+        lateinit var instance: KinChatApplication
+            private set
+    }
 
     @Inject
     lateinit var workerFactory: HiltWorkerFactory
@@ -25,6 +42,11 @@ class KinChatApplication : Application(), Configuration.Provider {
     @Inject
     lateinit var pendingSyncCoordinator: PendingSyncCoordinator
 
+    // OneSignal specific variables
+    private val ONESIGNAL_APP_ID = "c3b6c28c-fdf0-4eb1-be03-e02f2057628d"
+    private val dialogShown = AtomicBoolean(false)
+    private var pushSubscriptionObserver: IPushSubscriptionObserver? = null
+
     override val workManagerConfiguration: Configuration
         get() = Configuration.Builder()
             .setWorkerFactory(workerFactory)
@@ -32,8 +54,19 @@ class KinChatApplication : Application(), Configuration.Provider {
 
     override fun onCreate() {
         super.onCreate()
+        
+        // 🚀 NEW: Context instance সেট করা হলো
+        instance = this
 
         AppLogger.init() // Initialize the global developer logger
+
+        // --- OneSignal Initialization ---
+        OneSignal.Debug.logLevel = LogLevel.VERBOSE
+        OneSignal.initWithContext(this, ONESIGNAL_APP_ID)
+
+        // Setup observer to check subscription status
+        setupPushSubscriptionObserver()
+        // --------------------------------
 
         // 🚀 Phase 5: Start observing network changes and flush pending operations on startup
         pendingSyncCoordinator.startMonitoring()
@@ -60,6 +93,27 @@ class KinChatApplication : Application(), Configuration.Provider {
         if (!savedUserId.isNullOrBlank() && !savedUserName.isNullOrBlank()) {
             AppLogger.d("ZegoCloud", "🚀 Auto-initializing ZegoCloud in Application for offline calls")
             initZegoCloud(savedUserId, savedUserName)
+        }
+    }
+
+    private fun setupPushSubscriptionObserver() {
+        val observer = object : IPushSubscriptionObserver {
+            override fun onPushSubscriptionChange(state: PushSubscriptionChangedState) {
+                checkAndRequestPermission(state.current.id)
+            }
+        }
+        pushSubscriptionObserver = observer
+        OneSignal.User.pushSubscription.addObserver(observer)
+        checkAndRequestPermission(OneSignal.User.pushSubscription.id)
+    }
+
+    private fun checkAndRequestPermission(subscriptionId: String?) {
+        val isRegistered = !subscriptionId.isNullOrEmpty() && !subscriptionId.startsWith("local-")
+        if (isRegistered && dialogShown.compareAndSet(false, true)) {
+            // OneSignal SDK 5.x handles Android 13+ permission request internally when calling this
+            CoroutineScope(Dispatchers.Main).launch {
+                OneSignal.Notifications.requestPermission(true)
+            }
         }
     }
 

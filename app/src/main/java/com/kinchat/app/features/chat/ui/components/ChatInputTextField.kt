@@ -21,6 +21,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import com.kinchat.app.core.designsystem.LocalExtendedColors
 
 @Composable
 fun ChatInputTextField(
@@ -34,7 +35,7 @@ fun ChatInputTextField(
     Row(
         modifier = modifier
             .clip(RoundedCornerShape(24.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .background(LocalExtendedColors.current.inputFieldBackground)
             .padding(horizontal = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -42,7 +43,7 @@ fun ChatInputTextField(
             Icon(
                 imageVector = Icons.Default.AttachFile,
                 contentDescription = "Attach",
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                tint = LocalExtendedColors.current.attachmentIcon
             )
         }
 
@@ -50,7 +51,7 @@ fun ChatInputTextField(
             value = text,
             onValueChange = onTextChange,
             modifier = Modifier.weight(1f),
-            placeholder = { Text("Message $partnerName") },
+            placeholder = { Text("Message $partnerName", color = LocalExtendedColors.current.inputPlaceholder) },
             colors = TextFieldDefaults.colors(
                 focusedContainerColor = Color.Transparent,
                 unfocusedContainerColor = Color.Transparent,
@@ -66,7 +67,7 @@ fun ChatInputTextField(
             Icon(
                 imageVector = Icons.Default.CameraAlt,
                 contentDescription = "Gallery",
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                tint = LocalExtendedColors.current.attachmentIcon
             )
         }
     }

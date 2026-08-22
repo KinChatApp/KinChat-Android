@@ -1,8 +1,9 @@
 package com.kinchat.app.features.auth.viewmodel
 
-import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.kinchat.app.BuildConfig
+import com.kinchat.app.core.logging.AppLogger
 import com.kinchat.app.data.local.datastore.AuthPreferencesManager
 import com.kinchat.app.data.local.datastore.UserPreferencesManager
 import com.kinchat.app.data.source.auth.SupabaseAuthDataSource
@@ -22,8 +23,8 @@ import javax.inject.Inject
 class LoginViewModel @Inject constructor(
     private val repository: AuthRepository,
     private val userPreferencesManager: UserPreferencesManager,
-    private val authPreferencesManager: AuthPreferencesManager, // INJECTED
-    private val supabaseAuthDataSource: SupabaseAuthDataSource, // INJECTED for fetching ID
+    private val authPreferencesManager: AuthPreferencesManager,
+    private val supabaseAuthDataSource: SupabaseAuthDataSource,
     private val fcmTokenProvider: FcmTokenProvider
 ) : ViewModel() {
 
@@ -37,7 +38,6 @@ class LoginViewModel @Inject constructor(
     fun updatePhoneNumber(phone: String) {
         val cleanPhone = PhoneFormatter.cleanPhoneNumber(phone)
         _uiState.update { it.copy(phoneNumber = cleanPhone, error = null) }
-
         if (PhoneFormatter.isReadyForSubmission(cleanPhone) && !_uiState.value.isLoading) {
             requestOtp()
         }
@@ -49,9 +49,7 @@ class LoginViewModel @Inject constructor(
 
     fun updateOtp(otp: String) {
         val cleanOtp = PhoneFormatter.cleanOtp(otp)
-
         if (_uiState.value.otp == cleanOtp) return
-
         _uiState.update { it.copy(otp = cleanOtp, error = null) }
 
         if (PhoneFormatter.isOtpValid(cleanOtp) && !_uiState.value.isLoading) {
@@ -68,17 +66,10 @@ class LoginViewModel @Inject constructor(
 
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, error = null) }
-
             when (val result = repository.requestOtp(fullPhone, emailToSend)) {
-                is RequestOtpResult.EmailRequired -> {
-                    _uiState.update { it.copy(step = AuthStep.EMAIL, isLoading = false) }
-                }
-                is RequestOtpResult.OtpSent -> {
-                    _uiState.update { it.copy(step = AuthStep.OTP, isNewUser = result.isNewUser, isLoading = false) }
-                }
-                is RequestOtpResult.Error -> {
-                    _uiState.update { it.copy(error = result.message, isLoading = false) }
-                }
+                is RequestOtpResult.EmailRequired -> _uiState.update { it.copy(step = AuthStep.EMAIL, isLoading = false) }
+                is RequestOtpResult.OtpSent -> _uiState.update { it.copy(step = AuthStep.OTP, isNewUser = result.isNewUser, isLoading = false) }
+                is RequestOtpResult.Error -> _uiState.update { it.copy(error = result.message, isLoading = false) }
             }
         }
     }
@@ -91,39 +82,78 @@ class LoginViewModel @Inject constructor(
 
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, error = null) }
-
-            val result = repository.verifyOtp(
-                phone = fullPhone,
-                email = if (state.isNewUser) state.email else null,
-                otp = state.otp,
-                isNewUser = state.isNewUser
-            )
-
+            val result = repository.verifyOtp(fullPhone, if (state.isNewUser) state.email else null, state.otp, state.isNewUser)
             if (result.isSuccess) {
-                // 🚀 FIX: Ensure meId is updated in ViewModel post-auth as requested
-                supabaseAuthDataSource.getCurrentUserId()?.let { userId ->
-                    authPreferencesManager.setMeId(userId)
-                }
-
+                supabaseAuthDataSource.getCurrentUserId()?.let { authPreferencesManager.setMeId(it) }
                 syncFcmToken()
                 _uiState.update { it.copy(isLoading = false, isSuccess = true) }
             } else {
-                val errorMsg = result.exceptionOrNull()?.message ?: "Verification failed"
-                _uiState.update { it.copy(isLoading = false, error = errorMsg) }
+                _uiState.update { it.copy(isLoading = false, error = result.exceptionOrNull()?.message ?: "Verification failed") }
             }
         }
     }
 
-    private fun syncFcmToken() {
+    fun quickDevLogin(userNum: Int) {
+        val phone = if (userNum == 1) BuildConfig.DEV_USER1_PHONE else BuildConfig.DEV_USER2_PHONE
+        val email = if (userNum == 1) BuildConfig.DEV_USER1_EMAIL else BuildConfig.DEV_USER2_EMAIL
+        val otp = BuildConfig.DEV_TEST_OTP
+        val uiPhone = if (phone.startsWith("0")) phone.substring(1) else phone
+
+        _uiState.update { it.copy(countryCode = "880", phoneNumber = uiPhone, email = email, otp = otp, isLoading = true, error = null) }
+        val fullPhone = "+880$uiPhone"
+
         viewModelScope.launch {
-            try {
-                val fcmToken = fcmTokenProvider.getToken()
-                if (fcmToken != null) {
-                    repository.updateFcmToken(fcmToken)
+            when (val result = repository.requestOtp(fullPhone, email)) {
+                is RequestOtpResult.OtpSent -> {
+                    _uiState.update { it.copy(step = AuthStep.OTP, isNewUser = result.isNewUser) }
+                    verifyOtpBypass(fullPhone, email, otp, result.isNewUser)
                 }
-            } catch (e: Exception) {
-                Log.e("LoginViewModel", "Exception while saving FCM token", e)
+                is RequestOtpResult.EmailRequired -> {
+                    when (val emailResult = repository.requestOtp(fullPhone, email)) {
+                        is RequestOtpResult.OtpSent -> {
+                            _uiState.update { it.copy(step = AuthStep.OTP, isNewUser = emailResult.isNewUser) }
+                            verifyOtpBypass(fullPhone, email, otp, emailResult.isNewUser)
+                        }
+                        is RequestOtpResult.Error -> _uiState.update { it.copy(isLoading = false, error = emailResult.message) }
+                        else -> _uiState.update { it.copy(isLoading = false, error = "Unexpected error") }
+                    }
+                }
+                is RequestOtpResult.Error -> _uiState.update { it.copy(isLoading = false, error = result.message) }
             }
+        }
+    }
+
+    private fun verifyOtpBypass(fullPhone: String, email: String, otp: String, isNewUser: Boolean) {
+        viewModelScope.launch {
+            val result = repository.verifyOtp(fullPhone, if (isNewUser) email else null, otp, isNewUser)
+            if (result.isSuccess) {
+                supabaseAuthDataSource.getCurrentUserId()?.let { authPreferencesManager.setMeId(it) }
+                syncFcmToken()
+                _uiState.update { it.copy(isLoading = false, isSuccess = true) }
+            } else {
+                _uiState.update { it.copy(isLoading = false, error = result.exceptionOrNull()?.message ?: "Quick verification failed") }
+            }
+        }
+    }
+
+    private suspend fun syncFcmToken() {
+        AppLogger.d("FCM_SYNC", "--- Starting FCM Token Sync Process ---")
+        try {
+            val fcmToken = fcmTokenProvider.getToken()
+            if (fcmToken != null) {
+                AppLogger.d("FCM_SYNC", "Fetched Token: $fcmToken")
+                val result = repository.updateFcmToken(fcmToken)
+                
+                if (result.isSuccess) {
+                    AppLogger.d("FCM_SYNC", "✅ Token successfully saved via Repository")
+                } else {
+                    AppLogger.e("FCM_SYNC", "❌ Repository failed to save token: ${result.exceptionOrNull()?.message}")
+                }
+            } else {
+                AppLogger.e("FCM_SYNC", "❌ Token is NULL! Firebase/OneSignal failed to generate token.")
+            }
+        } catch (e: Exception) {
+            AppLogger.e("FCM_SYNC", "❌ Exception inside syncFcmToken: ${e.message}", e)
         }
     }
 }

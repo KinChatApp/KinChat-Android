@@ -88,10 +88,10 @@ fun PhoneInputStep(
                 .fillMaxWidth()
                 .height(48.dp),
             enabled = !isLoading,
-            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB))
+            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
         ) {
             if (isLoading) {
-                CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp))
+                CircularProgressIndicator(color = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(24.dp))
             } else {
                 Text("Continue")
             }

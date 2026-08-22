@@ -43,7 +43,9 @@ class NotificationHelper(
         try {
             val notificationId = chatId.hashCode()
             val senderIcon = imageHelper.loadAvatarOrInitial(avatarUrl, senderName)
-            val userPerson = Person.Builder().setName(NotificationConstants.LABEL_ME).build()
+            
+            // 🚀 FIX: LABEL_ME বা "Me" এর পরিবর্তে "You" সেট করা হলো
+            val userPerson = Person.Builder().setName("You").build() 
             val senderPerson = Person.Builder().setName(senderName).setIcon(senderIcon).build()
 
             val messagingStyle = styleBuilder.buildMessagingStyle(
@@ -78,7 +80,9 @@ class NotificationHelper(
             summaryManager.updateSummaryNotification()
 
         } catch (e: Exception) {
-            Log.e(TAG, "showConversationNotification failed for chatId=$chatId", e)
+            Log.e(TAG, "showConversationNotification failed for chatId=$chatId, falling back to plain notification", e)
+            val fallbackText = recentMessages.lastOrNull()?.content ?: "New message"
+            showFallbackNotification(chatId, senderName, fallbackText)
         }
     }
 

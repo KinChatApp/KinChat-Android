@@ -9,7 +9,7 @@
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
-    
+
     <!-- ZegoCloud Call Permissions -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.BLUETOOTH" />
@@ -44,6 +44,11 @@
         android:enableOnBackInvokedCallback="true"
         tools:targetApi="34">
 
+        <!-- 🚀 NEW: OneSignal Notification Extension -->
+        <meta-data
+            android:name="com.onesignal.NotificationServiceExtension"
+            android:value="com.kinchat.app.core.notifications.onesignal.NotificationExtension" />
+
         <provider
             android:name="androidx.startup.InitializationProvider"
             android:authorities="${applicationId}.androidx-startup"
@@ -70,7 +75,7 @@
             android:name=".MainActivity"
             android:exported="true"
             android:launchMode="singleTask"
-            android:theme="@style/Theme.Tuktak"
+            android:theme="@style/Theme.App.Starting"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -78,6 +83,7 @@
             </intent-filter>
         </activity>
 
+        <!-- FCM Service (Will run alongside OneSignal) -->
         <service
             android:name=".core.notifications.fcm.KinChatMessagingService"
             android:exported="true">

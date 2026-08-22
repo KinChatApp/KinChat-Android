@@ -1,7 +1,6 @@
 package com.kinchat.app.data.repository.chat.delegates
 
 import com.kinchat.app.core.logging.AppLogger
-import com.kinchat.app.data.remote.api.ChatNotificationService
 import com.kinchat.app.data.repository.chat.ChatMessageManager
 import com.kinchat.app.data.repository.chat.sync.PendingSyncCoordinator
 import java.util.UUID
@@ -9,8 +8,7 @@ import javax.inject.Inject
 
 class MessageManagerDelegate @Inject constructor(
     private val messageManager: ChatMessageManager,
-    private val syncCoordinator: PendingSyncCoordinator,
-    private val notificationService: ChatNotificationService
+    private val syncCoordinator: PendingSyncCoordinator
 ) {
     suspend fun sendMessage(chatId: String, senderId: String, content: String, replyToId: String?): Result<Unit> {
         val messageId = UUID.randomUUID().toString()
@@ -18,8 +16,6 @@ class MessageManagerDelegate @Inject constructor(
 
         val result = messageManager.sendMessage(messageId, chatId, senderId, content, replyToId)
         syncCoordinator.triggerSync()
-
-        notificationService.sendNotification(chatId, messageId, senderId, content, replyToId)
 
         return result
     }
@@ -50,14 +46,6 @@ class MessageManagerDelegate @Inject constructor(
         )
 
         syncCoordinator.triggerSync()
-
-        val notificationContent = when {
-            mimeType.startsWith("image/") -> "[Image] $fileName"
-            mimeType.startsWith("video/") -> "[Video] $fileName"
-            else -> "[File] $fileName"
-        }
-
-        notificationService.sendNotification(chatId, messageId, senderId, notificationContent, replyToId)
 
         return result
     }

@@ -8,7 +8,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.kinchat.app.features.chat.insights.domain.model.ChatInsights
@@ -23,7 +22,7 @@ fun HighlightsSection(data: ChatInsights) {
     ) {
         Column(modifier = Modifier.padding(20.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Icon(Icons.Rounded.EmojiEvents, contentDescription = null, tint = Color(0xFFFF9800))
+                Icon(Icons.Rounded.EmojiEvents, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                 Text("Highlights", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             }
             Spacer(modifier = Modifier.height(16.dp))

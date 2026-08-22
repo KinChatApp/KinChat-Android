@@ -3,12 +3,18 @@ package com.kinchat.app.features.auth.ui
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.ExperimentalAnimationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
@@ -25,6 +31,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.kinchat.app.BuildConfig
 import com.kinchat.app.features.auth.ui.components.AuthErrorBanner
 import com.kinchat.app.features.auth.ui.components.CountrySelectionBottomSheet
 import com.kinchat.app.features.auth.ui.components.EmailInputStep
@@ -103,6 +110,41 @@ fun LoginScreen(
                                 onVerifyOtp = viewModel::verifyOtp
                             )
                         }
+                    }
+                }
+            }
+        }
+
+        // 🚀 Quick Developer Login Buttons
+        if (BuildConfig.DEBUG) {
+            Column(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 32.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = "Quick Developer Login",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Button(
+                        onClick = { viewModel.quickDevLogin(1) },
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
+                        enabled = !uiState.isLoading
+                    ) {
+                        Text("User 1")
+                    }
+                    Button(
+                        onClick = { viewModel.quickDevLogin(2) },
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
+                        enabled = !uiState.isLoading
+                    ) {
+                        Text("User 2")
                     }
                 }
             }

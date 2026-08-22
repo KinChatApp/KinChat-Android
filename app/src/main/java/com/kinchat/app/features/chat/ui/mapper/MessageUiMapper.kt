@@ -26,6 +26,12 @@ object MessageUiMapper {
     ): MessageUiModel {
         val isMe = entity.senderId == currentUserId
         val type = MessageType.from(entity.type ?: "text")
+        
+        // 🚀 FIX: ডাটাবেস ভ্যালু অথবা টেক্সট কন্টেন্ট চেক করে ডিলিট স্ট্যাটাস বের করা হচ্ছে
+        val isDeletedMessage = entity.deletedAt != null ||
+                entity.content?.contains("This message was deleted") == true ||
+                entity.content?.contains("You deleted a message") == true ||
+                entity.content?.contains("You deleted this message") == true
 
         return MessageUiModel(
             id = entity.id ?: "",
@@ -37,7 +43,7 @@ object MessageUiMapper {
             isTopInGroup = isTopInGroup,
             showTail = showTail,
             status = MessageStatusUiState(
-                isDeleted = entity.deletedAt != null,
+                isDeleted = isDeletedMessage, // 🚀 এখানে নতুন ভেরিয়েবল পাস করা হলো
                 isForwarded = entity.isForwarded == true,
                 isEdited = entity.editedAt != null,
                 tickState = determineTickState(entity, currentUserId)
@@ -79,10 +85,10 @@ object MessageUiMapper {
 
     private fun mapMediaState(entity: ChatMessage): MediaUiState? {
         val attachment = entity.attachments?.firstOrNull() ?: return null
-        
+
         // FIX: Handle literal "null" strings as well as empty strings
-        val mediaUrl = attachment.fileUrl?.takeIf { it.isNotBlank() && it != "null" } 
-            ?: attachment.localUri?.takeIf { it.isNotBlank() && it != "null" } 
+        val mediaUrl = attachment.fileUrl?.takeIf { it.isNotBlank() && it != "null" }
+            ?: attachment.localUri?.takeIf { it.isNotBlank() && it != "null" }
             ?: ""
 
         return MediaUiState(
@@ -96,12 +102,12 @@ object MessageUiMapper {
     private fun mapAudioState(entity: ChatMessage): AudioUiState? {
         if (entity.type != "audio") return null
         val duration = entity.metadata?.get("duration")?.jsonPrimitive?.intOrNull ?: 0
-        
+
         val attachment = entity.attachments?.firstOrNull()
-        val url = attachment?.fileUrl?.takeIf { it.isNotBlank() && it != "null" } 
-            ?: attachment?.localUri?.takeIf { it.isNotBlank() && it != "null" } 
+        val url = attachment?.fileUrl?.takeIf { it.isNotBlank() && it != "null" }
+            ?: attachment?.localUri?.takeIf { it.isNotBlank() && it != "null" }
             ?: return null
-        
+
         return AudioUiState(url = url, durationSeconds = duration)
     }
 

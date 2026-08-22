@@ -23,6 +23,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.kinchat.app.R
+import com.kinchat.app.core.designsystem.LocalExtendedColors
 import com.kinchat.app.domain.model.TickState
 import com.kinchat.app.features.chat.ui.models.MessageUiModel
 import com.kinchat.app.features.chat.ui.models.ReplyPreviewUiState
@@ -31,7 +32,12 @@ import com.kinchat.app.features.chat.ui.mapper.ReactionMapper
 @Composable
 fun BubbleHeader(message: MessageUiModel) {
     if (message.status.isForwarded && !message.status.isDeleted) {
-        val timeColor = (if (message.isMe) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant).copy(alpha = 0.7f)
+        val extendedColors = LocalExtendedColors.current
+        val timeColor = if (message.isMe) {
+            extendedColors.bubbleTimestampSent
+        } else {
+            extendedColors.bubbleTimestampReceived
+        }
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 2.dp, start = 4.dp)) {
             Icon(Icons.Default.Reply, contentDescription = null, tint = timeColor, modifier = Modifier.size(12.dp))
             Spacer(modifier = Modifier.width(4.dp))
@@ -52,7 +58,6 @@ fun ReplyPreview(reply: ReplyPreviewUiState?) {
     ) {
         Column {
             Text(text = reply.senderName, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-            // 🚀 FIX: maxLines 1 থেকে বাড়িয়ে 3 করা হয়েছে যেন বড় মেসেজ ৩ লাইন পর্যন্ত দেখা যায়।
             Text(text = reply.previewText, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f), maxLines = 3, overflow = TextOverflow.Ellipsis, fontSize = 13.sp)
         }
     }
@@ -60,7 +65,12 @@ fun ReplyPreview(reply: ReplyPreviewUiState?) {
 
 @Composable
 fun ColumnScope.BubbleFooter(message: MessageUiModel) {
-    val timeColor = (if (message.isMe) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant).copy(alpha = 0.7f)
+    val extendedColors = LocalExtendedColors.current
+    val timeColor = if (message.isMe) {
+        extendedColors.bubbleTimestampSent
+    } else {
+        extendedColors.bubbleTimestampReceived
+    }
     Row(
         modifier = Modifier
             .align(Alignment.End)
@@ -77,7 +87,7 @@ fun ColumnScope.BubbleFooter(message: MessageUiModel) {
                 TickState.SENDING -> Text("...", color = timeColor, fontSize = 11.sp)
                 TickState.SENT -> Icon(Icons.Default.Done, contentDescription = stringResource(R.string.desc_sent), tint = timeColor, modifier = Modifier.size(15.dp))
                 TickState.DELIVERED -> Icon(Icons.Default.DoneAll, contentDescription = stringResource(R.string.desc_delivered), tint = timeColor, modifier = Modifier.size(16.dp))
-                TickState.READ -> Icon(Icons.Default.DoneAll, contentDescription = stringResource(R.string.desc_read), tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
+                TickState.READ -> Icon(Icons.Default.DoneAll, contentDescription = stringResource(R.string.desc_read), tint = LocalExtendedColors.current.statusRead, modifier = Modifier.size(16.dp))
             }
         }
     }

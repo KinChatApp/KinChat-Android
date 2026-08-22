@@ -10,11 +10,11 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
@@ -45,7 +45,7 @@ fun MediaViewerDialog(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.95f))
+                .background(MaterialTheme.colorScheme.background.copy(alpha = 0.95f))
         ) {
             // Media Content
             if (mediaType == "video") {
@@ -67,7 +67,7 @@ fun MediaViewerDialog(
                         Icon(
                             imageVector = Icons.Default.Download,
                             contentDescription = "Download",
-                            tint = Color.White
+                            tint = MaterialTheme.colorScheme.onBackground
                         )
                     }
                 }
@@ -76,7 +76,7 @@ fun MediaViewerDialog(
                     Icon(
                         imageVector = Icons.Default.Close,
                         contentDescription = "Close",
-                        tint = Color.White
+                        tint = MaterialTheme.colorScheme.onBackground
                     )
                 }
             }

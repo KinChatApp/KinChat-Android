@@ -73,6 +73,12 @@ class ContactsViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isSyncing = true, errorMsg = null) }
             val result = contactsUseCases.syncDeviceContacts()
+            
+            // লোকাল সিঙ্ক সফল হলে সার্ভার থেকেও রেজিস্টার্ড ইউজার চেক করে আপডেট করুন
+            if (result.isSuccess) {
+                contactsUseCases.loadRemoteContacts()
+            }
+            
             _uiState.update { it.copy(isSyncing = false, errorMsg = result.errorMessage) }
         }
     }

@@ -1,13 +1,11 @@
 package com.kinchat.app.features.dashboard.ui.components
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -20,12 +18,10 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import com.kinchat.app.core.designsystem.BrandPrimary
-import com.kinchat.app.core.designsystem.ForegroundLight
+import com.kinchat.app.R
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -39,23 +35,12 @@ fun HomeHeader(
     TopAppBar(
         title = {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                // K - Chat Bubble Logo
-                Box(
-                    modifier = Modifier
-                        .size(36.dp)
-                        .background(
-                            color = BrandPrimary,
-                            shape = RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp, bottomEnd = 12.dp, bottomStart = 4.dp)
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "K",
-                        color = Color.White,
-                        fontWeight = FontWeight.ExtraBold,
-                        fontSize = 20.sp
-                    )
-                }
+                // App Logo
+                Image(
+                    painter = painterResource(id = R.drawable.icon),
+                    contentDescription = "KinChat Logo",
+                    modifier = Modifier.size(36.dp)
+                )
 
                 Spacer(modifier = Modifier.width(12.dp))
 
@@ -64,7 +49,7 @@ fun HomeHeader(
                     text = "KinChat",
                     style = MaterialTheme.typography.titleLarge.copy(
                         fontWeight = FontWeight.Bold,
-                        color = ForegroundLight
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                 )
             }
@@ -77,7 +62,7 @@ fun HomeHeader(
                 Icon(
                     imageVector = Icons.Outlined.Search,
                     contentDescription = "Search",
-                    tint = ForegroundLight,
+                    tint = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.size(28.dp)
                 )
             }

@@ -18,6 +18,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.launch
@@ -32,7 +33,7 @@ class DashboardRepositoryImpl @Inject constructor(
     private val chatMessageDao: ChatMessageDao
 ) : DashboardRepository {
 
-    private val safeScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private val safeScope = CoroutineScope(Dispatchers.IO + SupervisorJob())                             
     private val syncManager = DashboardSyncManager(
         supabase = supabase,
         chatDao = chatDao,
@@ -57,18 +58,32 @@ class DashboardRepositoryImpl @Inject constructor(
 
     @OptIn(ExperimentalCoroutinesApi::class)
     override fun getRecentChats(): Flow<List<Chat>> {
-        return supabase.auth.sessionStatus
-            .filterIsInstance<SessionStatus.Authenticated>()
-            .mapNotNull { it.session.user?.id }
-            .flatMapLatest { currentUserId ->
-                safeScope.launch {
-                    syncManager.syncDashboardChats(currentUserId)
-                }
+        // অফলাইনের জন্য লোকাল ক্যাশ থেকে সরাসরি ইউজার আইডি নেওয়ার চেষ্টা
+        val cachedUserId = supabase.auth.currentUserOrNull()?.id
 
-                chatDao.observeAllChatsFlow(currentUserId).map { previews ->
-                    previews.map { it.toDomainModel(currentUserId) }
+        val userIdFlow = if (cachedUserId != null) {
+            flowOf(cachedUserId)
+        } else {
+            supabase.auth.sessionStatus
+                .filterIsInstance<SessionStatus.Authenticated>()
+                .mapNotNull { it.session.user?.id }
+        }
+
+        return userIdFlow.flatMapLatest { currentUserId ->
+            // ব্যাকগ্রাউন্ডে সিঙ্ক হবে, ফেইল হলেও ক্র্যাশ করবে না বা ফ্লো ব্লক করবে না
+            safeScope.launch {
+                try {
+                    syncManager.syncDashboardChats(currentUserId)
+                } catch (e: Exception) {
+                    // অফলাইনে সিঙ্ক ফেইল হলে ইগনোর করবে
                 }
             }
+            
+            // সাথে সাথে Room DB থেকে ডাটা রিটার্ন করবে
+            chatDao.observeAllChatsFlow(currentUserId).map { previews ->
+                previews.map { it.toDomainModel(currentUserId) }
+            }
+        }
     }
 
     override suspend fun deleteChat(chatId: String): Result<Unit> = Result.success(Unit)

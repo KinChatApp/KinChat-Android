@@ -10,7 +10,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.kinchat.app.domain.model.ChatMessage
@@ -162,7 +161,7 @@ fun MessageActionMenu(
                     DropdownMenuItem(
                         text = { Text("Report", fontWeight = FontWeight.Medium) },
                         onClick = { onAction("report", message); onClose() },
-                        leadingIcon = { Icon(Icons.Default.Report, contentDescription = null, tint = Color.Gray) }
+                        leadingIcon = { Icon(Icons.Default.Report, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant) }
                     )
                 }
             }

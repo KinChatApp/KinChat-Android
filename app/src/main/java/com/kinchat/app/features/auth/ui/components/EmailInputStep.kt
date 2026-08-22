@@ -15,7 +15,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 
@@ -57,10 +56,10 @@ fun EmailInputStep(
                 .fillMaxWidth()
                 .height(48.dp),
             enabled = !isLoading,
-            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB))
+            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
         ) {
             if (isLoading) {
-                CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp))
+                CircularProgressIndicator(color = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(24.dp))
             } else {
                 Text("Send OTP via Email")
             }

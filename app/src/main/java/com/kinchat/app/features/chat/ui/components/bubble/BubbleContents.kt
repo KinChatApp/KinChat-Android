@@ -12,11 +12,21 @@ fun BubbleContents(
     onAction: (MessageAction) -> Unit,
     onSelect: () -> Unit
 ) {
+    // 🚀 মেসেজ ডিলিট হলে সেটি ইমেজ/অডিও যাই হোক না কেন, টেক্সট হিসেবে দেখাবে
+    if (message.status.isDeleted) {
+        TextContent(
+            message = message,
+            isSelectionModeEnabled = isSelectionModeEnabled,
+            onSelect = onSelect
+        )
+        return
+    }
+
     when (message.type) {
         MessageType.TEXT -> {
             TextContent(
-                message = message, 
-                isSelectionModeEnabled = isSelectionModeEnabled, 
+                message = message,
+                isSelectionModeEnabled = isSelectionModeEnabled,
                 onSelect = onSelect
             )
         }
@@ -25,8 +35,8 @@ fun BubbleContents(
                 message = message,
                 isSelectionModeEnabled = isSelectionModeEnabled,
                 onSelect = onSelect,
-                onMediaClick = { 
-                    message.media?.url?.let { onAction(MessageAction.OpenMedia(it, message.type)) } 
+                onMediaClick = {
+                    message.media?.url?.let { onAction(MessageAction.OpenMedia(it, message.type)) }
                 }
             )
         }
@@ -49,15 +59,15 @@ fun BubbleContents(
                 message = message,
                 isSelectionModeEnabled = isSelectionModeEnabled,
                 onSelect = onSelect,
-                onDownload = { 
-                    message.media?.url?.let { onAction(MessageAction.DownloadMedia(it, message.type)) } 
+                onDownload = {
+                    message.media?.url?.let { onAction(MessageAction.DownloadMedia(it, message.type)) }
                 }
             )
         }
         else -> {
             TextContent(
-                message = message, 
-                isSelectionModeEnabled = isSelectionModeEnabled, 
+                message = message,
+                isSelectionModeEnabled = isSelectionModeEnabled,
                 onSelect = onSelect
             )
         }

@@ -8,6 +8,11 @@ import com.kinchat.app.domain.repository.SettingsRepository
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.gotrue.auth
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -24,7 +29,7 @@ class SettingsRepositoryImpl @Inject constructor(
                 ?: return@withContext Result.failure(Exception("Not authenticated"))
 
             val entity = userSettingsDao.getUserSettings(userId)
-            
+
             if (entity != null) {
                 Result.success(
                     UserSettings(
@@ -42,20 +47,47 @@ class SettingsRepositoryImpl @Inject constructor(
         }
     }
 
+    // 🚀 লাইভ আপডেটের জন্য Flow ইমপ্লিমেন্টেশন
+    @OptIn(ExperimentalCoroutinesApi::class)
+    override fun getUserSettingsFlow(): Flow<UserSettings> {
+        return supabaseClient.auth.sessionStatus.flatMapLatest { status ->
+            val userId = when (status) {
+                is io.github.jan.supabase.gotrue.SessionStatus.Authenticated -> status.session.user?.id
+                else -> null
+            }
+            
+            if (userId != null) {
+                userSettingsDao.getUserSettingsFlow(userId).map { entity ->
+                    if (entity != null) {
+                        UserSettings(
+                            notificationsEnabled = entity.notificationsEnabled,
+                            readReceiptsEnabled = entity.readReceiptsEnabled,
+                            theme = entity.theme
+                        )
+                    } else {
+                        UserSettings() // Default settings
+                    }
+                }
+            } else {
+                flowOf(UserSettings())
+            }
+        }
+    }
+
     override suspend fun updateSetting(key: String, value: Any): Result<Unit> = withContext(Dispatchers.IO) {
         try {
             val userId = supabaseClient.auth.currentUserOrNull()?.id
                 ?: return@withContext Result.failure(Exception("Not authenticated"))
 
             val currentSettings = userSettingsDao.getUserSettings(userId) ?: UserSettingsEntity(userId = userId)
-            
+
             val updatedSettings = when (key) {
                 "notificationsEnabled" -> currentSettings.copy(notificationsEnabled = value as Boolean)
                 "readReceiptsEnabled" -> currentSettings.copy(readReceiptsEnabled = value as Boolean)
                 "theme" -> currentSettings.copy(theme = value as String)
                 else -> currentSettings
             }
-            
+
             userSettingsDao.insertOrUpdate(updatedSettings)
             Result.success(Unit)
         } catch (e: Exception) {

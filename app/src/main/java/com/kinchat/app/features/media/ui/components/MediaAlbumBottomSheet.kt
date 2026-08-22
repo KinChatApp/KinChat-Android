@@ -18,7 +18,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -65,7 +64,7 @@ fun <T> MediaAlbumBottomSheet(
                         { Icon(Icons.Default.Check, contentDescription = "Current album") }
                     } else null,
                     colors = ListItemDefaults.colors(
-                        containerColor = if (isCurrent) MaterialTheme.colorScheme.primaryContainer else Color.Transparent
+                        containerColor = if (isCurrent) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
                     ),
                     modifier = Modifier.clickable { onAlbumSelected(album) }
                 )

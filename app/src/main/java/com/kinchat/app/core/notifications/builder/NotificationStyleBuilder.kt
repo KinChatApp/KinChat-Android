@@ -16,10 +16,11 @@ class NotificationStyleBuilder {
         userPerson: Person,
         senderPerson: Person
     ): NotificationCompat.MessagingStyle {
-        
-        // Explicitly storing the builder to avoid Kotlin scope function (apply) type inference issues.
+
+        // 🚀 FIX: For 1-on-1 chats, ConversationTitle must be null.
+        // Android will automatically use the sender's name as the notification title.
         val style = NotificationCompat.MessagingStyle(userPerson)
-            .setConversationTitle(senderName)
+            .setConversationTitle(null)
             .setGroupConversation(false)
 
         recentMessages.forEach { msg ->
@@ -29,7 +30,7 @@ class NotificationStyleBuilder {
 
             val displayContent = msg.content?.takeIf { it.isNotBlank() }
                 ?: NotificationConstants.FALLBACK_MEDIA_CONTENT
-                
+
             style.addMessage(displayContent, time, person)
         }
 

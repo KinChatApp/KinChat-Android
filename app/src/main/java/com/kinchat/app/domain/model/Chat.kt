@@ -3,6 +3,7 @@ package com.kinchat.app.domain.model
 data class Chat(
     val id: String,
     val name: String,
+    val partnerId: String? = null, // 🚀 FIX: অন্য ইউজারের আইডি চেনার জন্য যোগ করা হলো
     val lastMessage: String?,
     val timestamp: Long,
     val unreadCount: Int,

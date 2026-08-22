@@ -9,8 +9,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import com.kinchat.app.core.designsystem.LocalExtendedColors
 
 @Composable
 fun AuthErrorBanner(
@@ -21,13 +21,13 @@ fun AuthErrorBanner(
         Box(
             modifier = modifier
                 .fillMaxWidth()
-                .background(Color(0xFFFFEBEE), RoundedCornerShape(4.dp))
+                .background(LocalExtendedColors.current.errorBanner, RoundedCornerShape(4.dp))
                 .padding(12.dp)
                 .padding(bottom = 16.dp)
         ) {
             Text(
                 text = error,
-                color = Color(0xFFC62828),
+                color = MaterialTheme.colorScheme.error,
                 style = MaterialTheme.typography.bodySmall
             )
         }

@@ -40,13 +40,13 @@ fun MediaPreviewOverlay(
     onSend: () -> Unit,
     imageLoader: ImageLoader
 ) {
-    Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
+    Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         Column(modifier = Modifier.fillMaxSize()) {
             TopAppBar(
-                title = { Text("Preview", color = Color.White) },
+                title = { Text("Preview", color = MaterialTheme.colorScheme.onBackground) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Default.Close, contentDescription = "Back", tint = Color.White)
+                        Icon(Icons.Default.Close, contentDescription = "Back", tint = MaterialTheme.colorScheme.onBackground)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
@@ -61,7 +61,7 @@ fun MediaPreviewOverlay(
                 }
             }
 
-            Surface(color = Color.DarkGray, modifier = Modifier.fillMaxWidth()) {
+            Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh, modifier = Modifier.fillMaxWidth()) {
                 Row(
                     modifier = Modifier.padding(16.dp).navigationBarsPadding(),
                     verticalAlignment = Alignment.CenterVertically
@@ -69,11 +69,11 @@ fun MediaPreviewOverlay(
                     OutlinedTextField(
                         value = captionText,
                         onValueChange = onCaptionChange,
-                        placeholder = { Text("Add a caption...", color = Color.LightGray) },
+                        placeholder = { Text("Add a caption...", color = MaterialTheme.colorScheme.onSurfaceVariant) },
                         modifier = Modifier.weight(1f),
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = Color.White,
-                            unfocusedTextColor = Color.White,
+                            focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                            unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
                             focusedBorderColor = Color.Transparent,
                             unfocusedBorderColor = Color.Transparent
                         )

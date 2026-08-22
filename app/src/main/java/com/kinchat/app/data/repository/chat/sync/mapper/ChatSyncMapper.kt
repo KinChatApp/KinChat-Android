@@ -5,38 +5,49 @@ import com.kinchat.app.data.local.db.ChatMessageEntity
 import com.kinchat.app.data.local.db.MessageStatus
 import com.kinchat.app.data.local.db.MessageType
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.jsonPrimitive
 import java.time.Instant
 
 object ChatSyncMapper {
     private const val TAG = "ChatSyncMapper"
 
+    private fun JsonObject.getStringOrNull(key: String): String? {
+        val element = this[key]
+        if (element == null || element is JsonNull) return null
+        return element.jsonPrimitive.content
+    }
+
     fun mapJsonToEntity(jsonObj: JsonObject, fallbackChatId: String): ChatMessageEntity? {
         return try {
-            val createdAtStr = jsonObj["created_at"]?.jsonPrimitive?.content ?: return null
+            val createdAtStr = jsonObj.getStringOrNull("created_at") ?: return null
             val createdAtEpoch = Instant.parse(createdAtStr).toEpochMilli()
-            
-            // 🚀 FIX: Parse updated_at and deleted_at for proper sync
-            val updatedAtStr = jsonObj["updated_at"]?.jsonPrimitive?.content
+
+            val updatedAtStr = jsonObj.getStringOrNull("updated_at")
             val updatedAtEpoch = updatedAtStr?.let { Instant.parse(it).toEpochMilli() }
-            
-            val deletedAtStr = jsonObj["deleted_at"]?.jsonPrimitive?.content
+
+            // 🚀 SENIOR FIX: edited_at আলাদাভাবে রিসিভ করা হচ্ছে
+            val editedAtStr = jsonObj.getStringOrNull("edited_at")
+            val editedAtEpoch = editedAtStr?.let { Instant.parse(it).toEpochMilli() }
+
+            val deletedAtStr = jsonObj.getStringOrNull("deleted_at")
             val deletedAtEpoch = deletedAtStr?.let { Instant.parse(it).toEpochMilli() }
 
             ChatMessageEntity(
-                id = jsonObj["id"]?.jsonPrimitive?.content ?: return null,
-                chatId = jsonObj["chat_id"]?.jsonPrimitive?.content ?: fallbackChatId,
-                senderId = jsonObj["sender_id"]?.jsonPrimitive?.content ?: return null,
-                content = jsonObj["content"]?.jsonPrimitive?.content,
-                type = MessageType.valueOf(jsonObj["type"]?.jsonPrimitive?.content ?: "text"),
-                status = MessageStatus.DELIVERED, // Will be handled by upsertMessageMerged logic if local is PENDING
-                replyToId = jsonObj["reply_to_id"]?.jsonPrimitive?.content,
+                id = jsonObj.getStringOrNull("id") ?: return null,
+                chatId = jsonObj.getStringOrNull("chat_id") ?: fallbackChatId,
+                senderId = jsonObj.getStringOrNull("sender_id") ?: return null,
+                content = jsonObj.getStringOrNull("content"),
+                type = MessageType.valueOf(jsonObj.getStringOrNull("type") ?: "text"),
+                status = MessageStatus.DELIVERED,
+                replyToId = jsonObj.getStringOrNull("reply_to_id"),
                 createdAt = createdAtEpoch,
-                editedAt = updatedAtEpoch,
+                updatedAt = updatedAtEpoch,
+                editedAt = editedAtEpoch, // 🚀 FIX: শুধুমাত্র আসল edited_at সেট হবে
                 deletedAt = deletedAtEpoch,
-                isForwarded = jsonObj["is_forwarded"]?.jsonPrimitive?.content?.toBoolean() ?: false,
-                metadataJson = jsonObj["metadata"]?.toString(),
-                isDeletedForMe = deletedAtEpoch != null
+                isForwarded = jsonObj.getStringOrNull("is_forwarded")?.toBoolean() ?: false,
+                metadataJson = jsonObj.getStringOrNull("metadata"),
+                isDeletedForMe = false
             )
         } catch (e: Exception) {
             Log.e(TAG, "Failed to parse message JSON: ${e.message}")

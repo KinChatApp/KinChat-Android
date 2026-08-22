@@ -12,6 +12,7 @@ import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.gotrue.auth
+import java.io.IOException
 
 @HiltWorker
 class PendingOperationWorker @AssistedInject constructor(
@@ -36,43 +37,34 @@ class PendingOperationWorker @AssistedInject constructor(
         if (pendingOps.isEmpty()) return Result.success()
 
         var hasRecoverableFailure = false
-        // 🚀 FIX: Track failed referenceIds to guarantee FIFO order across dependent ops (e.g. Send -> Edit -> Delete)
         val failedReferenceIds = mutableSetOf<String>()
 
         for (op in pendingOps) {
             if (failedReferenceIds.contains(op.referenceId)) {
-                Log.d("PendingWorker", "Skipping dependent op ${op.id} due to previous failure on ref ${op.referenceId}")
                 continue
             }
 
             try {
-                // Dispatch the operation to the appropriate dedicated handler
                 operationDispatcher.dispatch(op)
-
-                // If operation was handled successfully, remove it from the pending queue
                 pendingOperationDao.deleteOperation(op.id)
-
             } catch (e: Exception) {
                 val errorMsg = e.message ?: "Unknown exception"
-                Log.e("PendingWorker", "Sync Failed: $errorMsg")
-                DebugLogger.log(
-                    applicationContext,
-                    "PendingWorker",
-                    "Sync Failed on type=${op.type} ref=${op.referenceId} attempt=${op.attempt}: $errorMsg",
-                    e
-                )
-
                 failedReferenceIds.add(op.referenceId)
-
-                // 🚀 FIX: Improve error categorization instead of relying solely on string matching
-                val isUnrecoverable = e is IllegalArgumentException || errorMsg.contains("invalid input syntax for type uuid")
                 
+                // 🚀 PRO-FIX: Strict categorization to maintain WorkManager and DB semantics parity
+                val isUnrecoverable = e is IllegalArgumentException || errorMsg.contains("invalid input syntax") || errorMsg.contains("400")
+                val isNetworkError = e is IOException || errorMsg.contains("timeout", ignoreCase = true) || errorMsg.contains("network", ignoreCase = true) || errorMsg.contains("Failed to connect", ignoreCase = true)
+
                 if (isUnrecoverable) {
-                    // Dead letter: Mark as DEAD immediately without further retries
                     val deadOp = op.copy(status = "DEAD", lastError = errorMsg)
                     pendingOperationDao.updateOperation(deadOp)
+                } else if (isNetworkError) {
+                    hasRecoverableFailure = true
+                    // Do NOT increment attempt or change state to FAILED.
+                    // Keep it PENDING so the DAO fetches it again, but WorkManager will handle the delay via Result.retry().
+                    val networkOp = op.copy(lastError = "Network error: $errorMsg", status = "PENDING")
+                    pendingOperationDao.updateOperation(networkOp)
                 } else {
-                    // Recoverable error: Increment attempt and check maxAttempts
                     hasRecoverableFailure = true
                     val updatedOp = op.incrementAttempt(errorMsg)
                     pendingOperationDao.updateOperation(updatedOp)
@@ -80,13 +72,6 @@ class PendingOperationWorker @AssistedInject constructor(
             }
         }
 
-        val finalResult = if (hasRecoverableFailure) Result.retry() else Result.success()
-        DebugLogger.log(
-            applicationContext,
-            "PendingWorker",
-            "doWork finished: ${if (hasRecoverableFailure) "RETRY" else "SUCCESS"}"
-        )
-
-        return finalResult
+        return if (hasRecoverableFailure) Result.retry() else Result.success()
     }
 }

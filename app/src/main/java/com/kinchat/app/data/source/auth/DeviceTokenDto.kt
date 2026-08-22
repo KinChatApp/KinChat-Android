@@ -7,6 +7,6 @@ import kotlinx.serialization.Serializable
 data class DeviceTokenDto(
     @SerialName("user_id") val userId: String,
     @SerialName("device_token") val deviceToken: String,
-    @SerialName("device_type") val deviceType: String = "android",
-    @SerialName("is_active") val isActive: Boolean = true
+    @SerialName("device_type") val deviceType: String,
+    @SerialName("is_active") val isActive: Boolean
 )

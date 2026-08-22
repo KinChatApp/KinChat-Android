@@ -10,6 +10,7 @@ import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
+import io.github.jan.supabase.SupabaseClient
 import javax.inject.Singleton
 
 @Module
@@ -21,14 +22,16 @@ object ContactsModule {
     fun provideContactsRepository(
         localDataSource: LocalContactsDataSource,
         remoteDataSource: RemoteContactsDataSource,
-        contactDao: ContactDao, // 🚀 FIX: Injected ContactDao
-        phoneSanitizer: PhoneNumberSanitizer
+        contactDao: ContactDao,
+        phoneSanitizer: PhoneNumberSanitizer,
+        supabaseClient: SupabaseClient
     ): ContactsRepository {
         return ContactsRepositoryImpl(
             localDataSource = localDataSource,
             remoteDataSource = remoteDataSource,
             contactDao = contactDao,
-            phoneSanitizer = phoneSanitizer
+            phoneSanitizer = phoneSanitizer,
+            supabaseClient = supabaseClient
         )
     }
 }

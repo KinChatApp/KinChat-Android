@@ -16,7 +16,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -63,10 +62,10 @@ fun OtpInputStep(
                 .fillMaxWidth()
                 .height(48.dp),
             enabled = !isLoading,
-            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF16A34A))
+            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
         ) {
             if (isLoading) {
-                CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp))
+                CircularProgressIndicator(color = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(24.dp))
             } else {
                 Text("Verify & Login")
             }

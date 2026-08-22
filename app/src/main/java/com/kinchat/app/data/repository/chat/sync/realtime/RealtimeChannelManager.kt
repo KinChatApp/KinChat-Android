@@ -1,6 +1,7 @@
 package com.kinchat.app.data.repository.chat.sync.realtime
 
 import android.util.Log
+import com.kinchat.app.data.repository.chat.sync.fetcher.MissedMessageFetcher
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.realtime.PostgresAction
 import io.github.jan.supabase.realtime.RealtimeChannel
@@ -10,6 +11,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
@@ -20,9 +22,11 @@ import javax.inject.Singleton
 @Singleton
 class RealtimeChannelManager @Inject constructor(
     private val supabaseClient: SupabaseClient,
-    private val realtimeMessageHandler: RealtimeMessageHandler
+    private val realtimeMessageHandler: RealtimeMessageHandler,
+    private val missedMessageFetcher: MissedMessageFetcher 
 ) {
     private val activeChannels = ConcurrentHashMap<String, RealtimeChannel>()
+    private val channelJobs = ConcurrentHashMap<String, Job>()
 
     private val exceptionHandler = CoroutineExceptionHandler { _, exception ->
         Log.e(TAG, "Global Realtime Coroutine Error Caught", exception)
@@ -37,30 +41,46 @@ class RealtimeChannelManager @Inject constructor(
             return
         }
 
+        Log.d(TAG, "Starting Realtime listener for exactly: $chatId")
         val channel = supabaseClient.channel("${CHANNEL_PREFIX}_$chatId")
         activeChannels[chatId] = channel
 
-        realtimeScope.launch {
+        val job = realtimeScope.launch {
             try {
                 val messagesFlow = channel.postgresChangeFlow<PostgresAction>(schema = SCHEMA_PUBLIC) {
                     table = TABLE_MESSAGES
-                    // Suppressed deprecation warning to ensure safe compilation 
-                    // without needing exact matching import paths for FilterOperation.
                     filter = "$COLUMN_CHAT_ID=eq.$chatId"
                 }
 
-                val collectionJob = launch {
+                launch {
                     messagesFlow.collect { action ->
+                        Log.d(TAG, "Realtime action received for $chatId: ${action::class.simpleName}")
                         realtimeMessageHandler.handleAction(action, chatId)
+                    }
+                }
+
+                launch {
+                    channel.status.collect { status ->
+                        Log.d(TAG, "Channel status for $chatId is now: $status")
+                        // 🚀 BUG FIX: Safe String checking immune to SDK enum version changes (SUBSCRIBED / JOINED)
+                        val statusStr = status.name.uppercase()
+                        if (statusStr == "SUBSCRIBED" || statusStr == "JOINED") {
+                            try {
+                                Log.d(TAG, "Reconnected! Fetching any missed messages for $chatId...")
+                                missedMessageFetcher.fetchMissedMessages(chatId)
+                            } catch (e: Exception) {
+                                Log.e(TAG, "Failed to fetch missed messages upon reconnect for $chatId", e)
+                            }
+                        }
                     }
                 }
 
                 try {
                     channel.subscribe()
+                    Log.d(TAG, "Successfully subscribed to channel: $chatId")
                 } catch (e: Exception) {
                     Log.e(TAG, "Failed to subscribe to channel $chatId", e)
-                    collectionJob.cancel()
-                    activeChannels.remove(chatId)
+                    stopRealtimeListener(chatId)
                 }
 
             } catch (e: CancellationException) {
@@ -70,13 +90,17 @@ class RealtimeChannelManager @Inject constructor(
                 Log.e(TAG, "Realtime Error for chat $chatId", e)
             }
         }
+
+        channelJobs[chatId] = job
     }
 
     fun stopRealtimeListener(chatId: String) {
+        channelJobs.remove(chatId)?.cancel()
         activeChannels.remove(chatId)?.let { channel ->
             realtimeScope.launch {
                 try {
                     channel.unsubscribe()
+                    Log.d(TAG, "Successfully unsubscribed from channel: $chatId")
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {

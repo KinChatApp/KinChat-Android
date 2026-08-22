@@ -11,7 +11,6 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.currentBackStackEntryAsState
 import com.kinchat.app.core.ui.components.DeveloperFloatingButton
-import com.kinchat.app.domain.repository.AuthRepository
 import com.kinchat.app.features.dashboard.ui.components.BottomNavigationBar
 import com.kinchat.app.navigation.graph.authNavGraph
 import com.kinchat.app.navigation.graph.chatNavGraph
@@ -21,18 +20,10 @@ import com.kinchat.app.navigation.graph.developerNavGraph
 import com.kinchat.app.navigation.graph.searchNavGraph
 import com.kinchat.app.navigation.graph.settingsNavGraph
 
-/**
- * Root navigation host for KinChat.
- *
- * Wires the bottom navigation bar, the primary [NavHost] graph (delegated to
- * per-feature [androidx.navigation.NavGraphBuilder] extensions under
- * [com.kinchat.app.navigation.graph]), and the global draggable
- * developer-tools shortcut.
- */
 @Composable
 fun AppNavigation(
     navController: NavHostController,
-    authRepository: AuthRepository
+    startDestination: String // 🚀 সরাসরি রুট রিসিভ করবে
 ) {
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = resolveBaseRoute(navBackStackEntry?.destination?.route)
@@ -56,10 +47,10 @@ fun AppNavigation(
         ) { innerPadding ->
             NavHost(
                 navController = navController,
-                startDestination = NavRoutes.SPLASH,
+                startDestination = startDestination, // 🚀 কোনো ডিলে ছাড়া সরাসরি রেন্ডার
                 modifier = Modifier.padding(innerPadding)
             ) {
-                authNavGraph(navController, authRepository)
+                authNavGraph(navController)
                 dashboardNavGraph(navController)
                 contactsNavGraph(navController)
                 settingsNavGraph(navController)
@@ -69,8 +60,6 @@ fun AppNavigation(
             }
         }
 
-        // --- GLOBAL DRAGGABLE DEVELOPER FLOATING ICON ---
-        // Shown everywhere except the splash screen and the log screen itself.
         if (showDeveloperFab) {
             DeveloperFloatingButton(
                 onClick = { navController.navigate(NavRoutes.DEVELOPER_LOGS) }

@@ -15,7 +15,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -86,18 +85,18 @@ fun MediaGridItem(
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
                     .padding(4.dp)
-                    .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(4.dp))
+                    .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.6f), RoundedCornerShape(4.dp))
                     .padding(horizontal = 4.dp, vertical = 2.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(Icons.Default.PlayArrow, contentDescription = null, tint = Color.White, modifier = Modifier.size(12.dp))
+                Icon(Icons.Default.PlayArrow, contentDescription = null, tint = MaterialTheme.colorScheme.surface, modifier = Modifier.size(12.dp))
                 Spacer(Modifier.width(2.dp))
-                Text(formatDuration(item.durationMs ?: 0), color = Color.White, style = MaterialTheme.typography.labelSmall)
+                Text(formatDuration(item.durationMs ?: 0), color = MaterialTheme.colorScheme.surface, style = MaterialTheme.typography.labelSmall)
             }
         }
 
         if (isSelected) {
-            Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.4f)))
+            Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.4f)))
             Box(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
@@ -119,7 +118,7 @@ fun MediaGridItem(
                     .align(Alignment.TopEnd)
                     .padding(6.dp)
                     .size(24.dp)
-                    .background(Color.Black.copy(alpha = 0.2f), CircleShape)
+                    .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.2f), CircleShape)
             )
         }
     }

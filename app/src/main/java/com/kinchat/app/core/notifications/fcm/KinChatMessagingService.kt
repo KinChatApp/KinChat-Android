@@ -7,9 +7,12 @@ import com.kinchat.app.core.notifications.fcm.model.FcmMessagePayload
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -43,9 +46,9 @@ class KinChatMessagingService : FirebaseMessagingService() {
 
         Log.d(TAG, "Message received from FCM: ${remoteMessage.data}")
 
-        // 🚀 FIX: Ignore ZegoCloud payloads so it doesn't interrupt custom chat messages
-        if (remoteMessage.data.toString().contains("zego")) {
-            Log.d(TAG, "ZegoCloud payload detected. Ignoring in custom FCM processor.")
+        // 🚀 FIX (P13): Replace fragile "zego" substring filter with explicit type check
+        if (remoteMessage.data["type"] == "call") {
+            Log.d(TAG, "Call payload detected. Ignoring in custom FCM processor.")
             return
         }
 
@@ -58,17 +61,21 @@ class KinChatMessagingService : FirebaseMessagingService() {
 
         scope.launch {
             try {
-                val handled = withTimeoutOrNull(WORK_TIMEOUT_MS) {
+                // 🚀 FIX (RC6): Use bounded withTimeout to strictly enforce the 8s budget
+                withTimeout(WORK_TIMEOUT_MS) {
                     messageProcessor.processAndNotify(payload)
-                    true
                 }
-
-                if (handled == null) {
+            } catch (e: TimeoutCancellationException) {
+                Log.w(TAG, "Message processing timed out, falling back to plain notification", e)
+                // 🚀 FIX: Protect fallback from onDestroy/job.cancel() using NonCancellable
+                withContext(NonCancellable) {
                     messageProcessor.showFallbackNotification(payload)
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to process message for chatId=${payload.chatId}", e)
-                messageProcessor.showFallbackNotification(payload)
+                withContext(NonCancellable) {
+                    messageProcessor.showFallbackNotification(payload)
+                }
             } finally {
                 wakeLockManager.releaseWakeLock(wakeLock)
             }

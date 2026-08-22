@@ -1,9 +1,7 @@
 package com.kinchat.app.data.remote.api
 
 import android.content.Context
-import android.widget.Toast
 import com.kinchat.app.core.logging.AppLogger
-// 🚀 Fixed import path for SendMessageRequest
 import com.kinchat.app.data.repository.chat.SendMessageRequest
 import dagger.hilt.android.qualifiers.ApplicationContext
 import io.github.jan.supabase.SupabaseClient
@@ -13,8 +11,6 @@ import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.contentType
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -58,15 +54,11 @@ class ChatNotificationServiceImpl @Inject constructor(
         } catch (e: ResponseException) {
             val status = e.response.status
             val errorBody = try { e.response.bodyAsText() } catch (ex: Exception) { "No error body" }
+            // 🚀 PRO-FIX: UI Toast রিমুভ করা হয়েছে যাতে অফলাইনে এরর না দেখায়।
             AppLogger.e("ChatNotification", "❌ Edge Function HTTP Error: ${status.value} - $errorBody", e)
-            withContext(Dispatchers.Main) {
-                Toast.makeText(context, "Server Error ${status.value}: $errorBody", Toast.LENGTH_LONG).show()
-            }
         } catch (e: Exception) {
+            // 🚀 PRO-FIX: UI Toast রিমুভ করা হয়েছে।
             AppLogger.e("ChatNotification", "🚨 Edge Function Error: ${e.message}", e)
-            withContext(Dispatchers.Main) {
-                Toast.makeText(context, "Error: ${e.message ?: e.javaClass.simpleName}", Toast.LENGTH_LONG).show()
-            }
         }
     }
 }

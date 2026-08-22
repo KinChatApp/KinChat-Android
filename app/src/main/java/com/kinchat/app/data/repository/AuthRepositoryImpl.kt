@@ -18,7 +18,7 @@ class AuthRepositoryImpl @Inject constructor(
     private val authApi: AuthApi,
     private val supabaseAuthDataSource: SupabaseAuthDataSource,
     private val deviceTokenDataSource: DeviceTokenDataSource,
-    private val authPreferencesManager: AuthPreferencesManager // INJECTED TO PERSIST meId
+    private val authPreferencesManager: AuthPreferencesManager
 ) : AuthRepository {
 
     override suspend fun requestOtp(phone: String, email: String?): RequestOtpResult {
@@ -58,7 +58,7 @@ class AuthRepositoryImpl @Inject constructor(
                         accessToken = body.session.accessToken,
                         refreshToken = body.session.refreshToken
                     )
-                    
+
                     // 🚀 FIX: Persist meId after successful auth
                     val userId = supabaseAuthDataSource.getCurrentUserId()
                     if (userId != null) {
@@ -78,19 +78,14 @@ class AuthRepositoryImpl @Inject constructor(
     override suspend fun logout(): Result<Unit> {
         return withContext(Dispatchers.IO) {
             try {
-                supabaseAuthDataSource.getCurrentUserId()?.let { userId ->
-                    try {
-                        deviceTokenDataSource.clearDeviceTokens(userId)
-                    } catch (e: Exception) {
-                        // Non-fatal, proceed to sign out even if clearing token fails locally
-                    }
-                }
-
-                supabaseAuthDataSource.signOut()
+                // 🚀 FIX (RC2): Removed deviceTokenDataSource.clearDeviceTokens(userId)
+                // Wiping out tokens for all devices is now prevented.
                 
+                supabaseAuthDataSource.signOut()
+
                 // 🚀 FIX: Clear meId on logout to disable notifications for logged out user
                 authPreferencesManager.setMeId("")
-                
+
                 Result.success(Unit)
             } catch (e: Exception) {
                 Result.failure(e)
@@ -106,7 +101,8 @@ class AuthRepositoryImpl @Inject constructor(
         return withContext(Dispatchers.IO) {
             try {
                 supabaseAuthDataSource.getCurrentUserId()?.let { userId ->
-                    deviceTokenDataSource.clearDeviceTokens(userId)
+                    // 🚀 FIX (RC2): Removed clearDeviceTokens(userId) to prevent deleting other devices' tokens.
+                    // Now it only saves/upserts the current token.
                     deviceTokenDataSource.saveDeviceToken(userId, token)
                 }
                 Result.success(Unit)

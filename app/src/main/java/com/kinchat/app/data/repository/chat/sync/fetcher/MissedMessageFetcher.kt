@@ -5,13 +5,11 @@ import com.kinchat.app.data.local.db.ChatMessageDao
 import com.kinchat.app.data.repository.chat.sync.mapper.ChatSyncMapper
 import com.kinchat.app.data.repository.chat.sync.utils.SyncRetryHelper.retryWithBackoff
 import io.github.jan.supabase.SupabaseClient
-import io.github.jan.supabase.gotrue.auth
 import io.github.jan.supabase.postgrest.postgrest
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.jsonPrimitive
 import java.time.Instant
 import javax.inject.Inject
 
@@ -23,10 +21,11 @@ class MissedMessageFetcher @Inject constructor(
         withContext(Dispatchers.IO) {
             try {
                 retryWithBackoff {
-                    // Fetch based on the last updated timestamp to catch edits/deletes as well
-                    val lastSyncTimeEpoch = chatMessageDao.getLastUpdatedTimestamp(chatId) 
-                        ?: chatMessageDao.getLastMessageTimestamp(chatId)
-                    val isInitialSync = lastSyncTimeEpoch == null
+                    val lastSyncEpoch = chatMessageDao.getLastMessageTimestamp(chatId) ?: 0L
+                    val lastEditEpoch = chatMessageDao.getLastUpdatedTimestamp(chatId) ?: 0L
+                    val targetEpoch = maxOf(lastSyncEpoch, lastEditEpoch)
+                    
+                    val isInitialSync = targetEpoch == 0L
 
                     var offset = 0L
                     val limit = 1000L
@@ -38,9 +37,9 @@ class MissedMessageFetcher @Inject constructor(
                                 filter {
                                     eq(COLUMN_CHAT_ID, chatId)
                                     if (!isInitialSync) {
-                                        // 🚀 FIX: Tracking edits and tombstones by updated_at (or created_at fallback)
-                                        val lastSyncIso = Instant.ofEpochMilli(lastSyncTimeEpoch!!).toString()
-                                        gt(COLUMN_UPDATED_AT, lastSyncIso)
+                                        val lastSyncIso = Instant.ofEpochMilli(targetEpoch).toString()
+                                        // 🚀 BUG FIX: Reverted to standard 'gt' to avoid SDK 'or' compatibility issues
+                                        gt("created_at", lastSyncIso)
                                     }
                                 }
                                 range(offset, offset + limit - 1)
@@ -53,9 +52,8 @@ class MissedMessageFetcher @Inject constructor(
                             }
 
                             if (entities.isNotEmpty()) {
-                                // 🚀 FIX: Delegate to Dao to merge, preventing REPLACE clobbering
                                 entities.forEach { entity ->
-                                    chatMessageDao.upsertMessageMerged(entity)
+                                    chatMessageDao.upsertMessageMerged(entity) 
                                 }
                             }
 
@@ -73,7 +71,7 @@ class MissedMessageFetcher @Inject constructor(
                 throw e
             } catch (e: Exception) {
                 Log.e(TAG, "Delta Sync Error for chat $chatId", e)
-                throw e // 🚀 FIX: Propagate failure to the caller
+                throw e
             }
         }
     }
@@ -82,6 +80,5 @@ class MissedMessageFetcher @Inject constructor(
         private const val TAG = "MissedMessageFetcher"
         private const val TABLE_MESSAGES = "messages"
         private const val COLUMN_CHAT_ID = "chat_id"
-        private const val COLUMN_UPDATED_AT = "updated_at"
     }
 }

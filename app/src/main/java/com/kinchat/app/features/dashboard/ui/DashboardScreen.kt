@@ -17,7 +17,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.kinchat.app.features.chat.ui.components.ChatContextMenu
 import com.kinchat.app.features.dashboard.ui.components.ChatFilterTabs
@@ -99,7 +98,7 @@ fun DashboardScreen(
                 text = { Text("Are you sure you want to delete this chat?") },
                 confirmButton = {
                     TextButton(onClick = viewModel::confirmDeleteChat) {
-                        Text("Delete", color = Color.Red)
+                        Text("Delete", color = MaterialTheme.colorScheme.error)
                     }
                 },
                 dismissButton = {

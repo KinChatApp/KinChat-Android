@@ -1,7 +1,7 @@
 package com.kinchat.app.navigation
 
 private val BOTTOM_BAR_ROUTES = setOf(NavRoutes.DASHBOARD, NavRoutes.CONTACTS, NavRoutes.SETTINGS)
-private val DEVELOPER_FAB_HIDDEN_ROUTES = setOf(NavRoutes.SPLASH, NavRoutes.DEVELOPER_LOGS)
+private val DEVELOPER_FAB_HIDDEN_ROUTES = setOf(NavRoutes.DEVELOPER_LOGS) // 🚀 SPLASH রিমুভ করা হয়েছে
 private const val DEFAULT_ACTIVE_TAB = "chats"
 
 /**

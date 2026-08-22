@@ -1,7 +1,6 @@
 package com.kinchat.app.navigation
 
 object NavRoutes {
-    const val SPLASH = "splash"
     const val LOGIN = "login"
     const val DASHBOARD = "dashboard"
     const val CONTACTS = "contacts"
@@ -13,7 +12,7 @@ object NavRoutes {
     const val CHAT_ID_ARG = "chatId"
     const val MESSAGE_ID_ARG = "messageId"
     const val REPLY_ID_ARG = "replyId"
-    
+
     const val CHAT_ROUTE = "$CHAT_BASE_ROUTE/{$CHAT_ID_ARG}?$MESSAGE_ID_ARG={$MESSAGE_ID_ARG}"
 
     const val CHAT_MEDIA_PICKER_BASE_ROUTE = "chatMediaPicker"
@@ -32,7 +31,7 @@ object NavRoutes {
     fun chatRoute(chatId: String, messageId: String? = null): String =
         if (messageId.isNullOrBlank()) "$CHAT_BASE_ROUTE/$chatId" else "$CHAT_BASE_ROUTE/$chatId?$MESSAGE_ID_ARG=$messageId"
 
-    fun chatMediaPickerRoute(chatId: String, replyId: String? = null): String = 
+    fun chatMediaPickerRoute(chatId: String, replyId: String? = null): String =
         if (replyId.isNullOrBlank()) "$CHAT_MEDIA_PICKER_BASE_ROUTE/$chatId" else "$CHAT_MEDIA_PICKER_BASE_ROUTE/$chatId?$REPLY_ID_ARG=$replyId"
 
     fun chatInfoRoute(userId: String): String = "$CHAT_INFO_BASE_ROUTE/$userId"

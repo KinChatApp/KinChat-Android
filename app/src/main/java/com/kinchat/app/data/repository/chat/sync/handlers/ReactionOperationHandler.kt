@@ -3,7 +3,6 @@ package com.kinchat.app.data.repository.chat.sync.handlers
 import android.util.Log
 import com.kinchat.app.data.local.db.OperationType
 import com.kinchat.app.data.local.db.PendingOperationEntity
-// 🚀 Fixed import for WorkerSyncDtos
 import com.kinchat.app.data.repository.chat.sync.models.WorkerMessageReactionDto
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.postgrest.postgrest
@@ -16,7 +15,7 @@ class ReactionOperationHandler @Inject constructor(
         when (op.type) {
             OperationType.ADD_REACTION -> handleAddReaction(op)
             OperationType.REMOVE_REACTION -> handleRemoveReaction(op)
-            else -> { /* Ignore other types */ } // FIX: exhaustive when
+            else -> { /* Ignore other types */ }
         }
     }
 
@@ -25,6 +24,7 @@ class ReactionOperationHandler @Inject constructor(
         val reactionValue = op.payloadJson
 
         if (messageId != null && userId != null && reactionValue != null) {
+            // 🚀 BUG FIX: Removed 'created_at' as it does not exist in WorkerMessageReactionDto
             val reactionDto = WorkerMessageReactionDto(
                 message_id = messageId,
                 user_id = userId,

@@ -5,11 +5,13 @@ import androidx.lifecycle.viewModelScope
 import com.kinchat.app.domain.model.Chat
 import com.kinchat.app.domain.repository.DashboardRepository
 import com.kinchat.app.domain.repository.ChatRepository
+import com.kinchat.app.domain.usecase.ContactsUseCases
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -27,7 +29,8 @@ data class DashboardUiState(
 @HiltViewModel
 class DashboardViewModel @Inject constructor(
     private val dashboardRepository: DashboardRepository,
-    private val chatRepository: ChatRepository
+    private val chatRepository: ChatRepository,
+    private val contactsUseCases: ContactsUseCases // 🚀 FIX: কন্টাক্ট ডেটা ফেচ করার জন্য UseCase ইনজেক্ট করা হলো
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(DashboardUiState())
@@ -39,18 +42,30 @@ class DashboardViewModel @Inject constructor(
 
     private fun loadChats() {
         viewModelScope.launch {
-            dashboardRepository.getRecentChats()
-                .onStart { _uiState.update { it.copy(isLoading = true) } }
-                .catch { e -> _uiState.update { it.copy(isLoading = false, error = e.message) } }
-                .collect { chatList ->
-                    // চ্যাটগুলো লোড হওয়ার সময় পিন করা চ্যাটগুলো উপরে রাখার জন্য সর্ট করা হয়েছে
-                    _uiState.update { 
-                        it.copy(
-                            isLoading = false, 
-                            chats = chatList.sortedByDescending { chat -> chat.isPinned }
-                        ) 
+            // 🚀 FIX: চ্যাট লিস্ট এবং কন্টাক্ট লিস্ট Combine করে ইউজারনেম রিপ্লেস করা
+            combine(
+                dashboardRepository.getRecentChats(),
+                contactsUseCases.getContacts()
+            ) { chatList, contacts ->
+                chatList.map { chat ->
+                    val contactName = contacts.find { it.registeredUserId == chat.partnerId }?.contactName
+                    if (contactName != null) {
+                        chat.copy(name = contactName) // কন্টাক্ট নেম পেলে সেটা রিপ্লেস করবে
+                    } else {
+                        chat // না পেলে আগেরটাই (username) থাকবে
                     }
+                }.sortedByDescending { it.isPinned }
+            }
+            .onStart { _uiState.update { it.copy(isLoading = true) } }
+            .catch { e -> _uiState.update { it.copy(isLoading = false, error = e.message) } }
+            .collect { finalChats ->
+                _uiState.update {
+                    it.copy(
+                        isLoading = false,
+                        chats = finalChats
+                    )
                 }
+            }
         }
     }
 
@@ -62,11 +77,6 @@ class DashboardViewModel @Inject constructor(
         _uiState.update { it.copy(selectedChatForMenu = null) }
     }
 
-    /**
-     * Clears all transient UI state (context menu / delete dialog). Called when
-     * the dashboard leaves composition so temporary UI can never survive a tab
-     * or navigation change and unexpectedly reappear when the screen returns.
-     */
     fun clearTransientUiState() {
         _uiState.update {
             it.copy(
@@ -77,17 +87,14 @@ class DashboardViewModel @Inject constructor(
         }
     }
 
-    // --- Action Handlers (With Supabase Connection) ---
-
     fun pinChat(chatId: String) {
         viewModelScope.launch {
             val chat = _uiState.value.chats.find { it.id == chatId } ?: return@launch
             val newStatus = !chat.isPinned
 
             _uiState.update { state ->
-                // স্টেট আপডেট করার পর লিস্টটিকে পুনরায় সর্ট করা হচ্ছে
-                val updatedChats = state.chats.map { 
-                    if (it.id == chatId) it.copy(isPinned = newStatus) else it 
+                val updatedChats = state.chats.map {
+                    if (it.id == chatId) it.copy(isPinned = newStatus) else it
                 }
                 state.copy(
                     chats = updatedChats.sortedByDescending { c -> c.isPinned },
@@ -157,8 +164,6 @@ class DashboardViewModel @Inject constructor(
             chatRepository.updateChatBlockStatus(chatId, newStatus)
         }
     }
-
-    // --- Delete Handlers ---
 
     fun requestDeleteChat(chatId: String) {
         _uiState.update {

@@ -17,7 +17,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.SpanStyle
@@ -50,8 +49,9 @@ fun MessageContent(
     val context = LocalContext.current
 
     if (message.deletedAt != null) {
+        val deletedText = if (isMe) "🚫 You deleted this message" else "🚫 This message was deleted"
         Text(
-            text = "🚫 You deleted a message",
+            text = deletedText,
             fontStyle = FontStyle.Italic,
             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
             fontSize = 15.sp
@@ -60,7 +60,7 @@ fun MessageContent(
     }
 
     val content = message.content ?: ""
-    
+
     // FIX: Extract URL from attachments first, fallback to content
     val mediaUrl = message.attachments?.firstOrNull()?.let { attachment ->
         attachment.fileUrl?.takeIf { it.isNotBlank() } ?: attachment.localUri
@@ -144,8 +144,8 @@ private fun TextMessage(text: String, query: String?, isSearchFocused: Boolean, 
 
             withStyle(
                 style = SpanStyle(
-                    background = if (isSearchFocused) Color(0xFFFFA726) else Color(0xFFFFF176),
-                    color = Color.Black
+                    background = if (isSearchFocused) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.secondaryContainer,
+                    color = if (isSearchFocused) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSecondaryContainer
                 )
             ) {
                 append(text.substring(index, index + query.length))
@@ -176,7 +176,7 @@ private fun MediaMessage(url: String, isVideo: Boolean, isSending: Boolean, onCl
             .clip(RoundedCornerShape(12.dp))
             .clickable(enabled = !isSending, onClick = onClick)
             .alpha(if (isSending) 0.7f else 1f)
-            .background(Color.Black)
+            .background(MaterialTheme.colorScheme.scrim)
     ) {
         AsyncImage(
             model = url,
@@ -190,20 +190,20 @@ private fun MediaMessage(url: String, isVideo: Boolean, isSending: Boolean, onCl
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.2f)),
+                    .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.2f)),
                 contentAlignment = Alignment.Center
             ) {
                 Box(
                     modifier = Modifier
                         .size(48.dp)
                         .clip(CircleShape)
-                        .background(Color.White.copy(alpha = 0.8f)),
+                        .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.8f)),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = Icons.Default.PlayArrow,
                         contentDescription = "Play Video",
-                        tint = Color.Black,
+                        tint = MaterialTheme.colorScheme.onSurface,
                         modifier = Modifier.size(32.dp)
                     )
                 }
@@ -259,7 +259,7 @@ private fun AudioMessagePlayer(url: String, isMe: Boolean, isSending: Boolean) {
     }
 
     val contentColor = if (isMe) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
-    val bgColor = if (isMe) Color.White.copy(alpha = 0.2f) else MaterialTheme.colorScheme.surfaceVariant
+    val bgColor = if (isMe) MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.2f) else MaterialTheme.colorScheme.surfaceVariant
 
     Row(
         modifier = Modifier
@@ -318,7 +318,7 @@ private fun DocumentMessage(fileName: String, isSending: Boolean, isMe: Boolean,
         modifier = Modifier
             .widthIn(max = 280.dp)
             .clip(RoundedCornerShape(8.dp))
-            .background(if (isMe) Color.White.copy(alpha = 0.1f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+            .background(if (isMe) MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.1f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
             .padding(8.dp)
             .alpha(if (isSending) 0.6f else 1f),
         verticalAlignment = Alignment.CenterVertically
@@ -352,7 +352,7 @@ private fun DocumentMessage(fileName: String, isSending: Boolean, isMe: Boolean,
             if (!isSending) {
                 Text(
                     text = "Download",
-                    color = if (isMe) Color.White.copy(alpha = 0.8f) else MaterialTheme.colorScheme.primary,
+                    color = if (isMe) MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.8f) else MaterialTheme.colorScheme.primary,
                     fontWeight = FontWeight.SemiBold,
                     fontSize = 12.sp,
                     modifier = Modifier

@@ -12,14 +12,24 @@ class PartnerInfoProvider @Inject constructor(
     suspend fun getPartnerName(chatId: String, currentUserId: String): String? {
         try {
             val localTitle = chatDao.getChatTitle(chatId)
-            if (!localTitle.isNullOrBlank()) {
-                AppLogger.d("PartnerInfoProvider", "Fetched partner name from Local DB")
+            // 🚀 FIX: Ignore default "New Chat" title so it can fallback to FCM payload
+            if (!localTitle.isNullOrBlank() && localTitle.trim().lowercase() != "new chat") {
+                AppLogger.d("PartnerInfoProvider", "Fetched partner name from Local DB: $localTitle")
                 return localTitle
             }
         } catch (e: Exception) {
             AppLogger.e("PartnerInfoProvider", "Local DB Error getting partner name", e)
         }
 
-        return rpcService.getPartnerName(chatId, currentUserId)
+        return try {
+            val remoteName = rpcService.getPartnerName(chatId, currentUserId)
+            if (!remoteName.isNullOrBlank() && remoteName.trim().lowercase() != "new chat") {
+                remoteName
+            } else {
+                null
+            }
+        } catch (e: Exception) {
+            null
+        }
     }
 }

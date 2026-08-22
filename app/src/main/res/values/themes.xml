@@ -1,11 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- parent পরিবর্তন করে Theme.MaterialComponents.Light.NoActionBar করা হয়েছে -->
     <style name="Theme.Tuktak" parent="Theme.MaterialComponents.Light.NoActionBar">
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
-        <item name="android:windowBackground">@android:color/white</item>
-        <!-- এই লাইনটি স্ট্যাটাস বারের আইকনগুলোকে কালো করে দেবে -->
+        <item name="android:windowBackground">#FAFAFE</item>
         <item name="android:windowLightStatusBar">true</item>
+    </style>
+
+    <!-- 🚀 NEW: Splash Screen Theme (Light) -->
+    <style name="Theme.App.Starting" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">#FAFAFE</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/splash</item>
+        <item name="postSplashScreenTheme">@style/Theme.Tuktak</item>
     </style>
 </resources>
