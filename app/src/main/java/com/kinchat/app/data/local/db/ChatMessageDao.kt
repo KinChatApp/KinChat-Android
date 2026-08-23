@@ -37,7 +37,6 @@ interface ChatMessageDao {
         if (local == null) {
             insertMessage(serverMessage)
         } else {
-            // 🚀 PRO-FIX: Explicit State Transition Matrix (No ordinal comparison)
             val isLocalTransient = local.status == MessageStatus.PENDING ||
                                    local.status == MessageStatus.SENDING ||
                                    local.status == MessageStatus.FAILED
@@ -47,12 +46,11 @@ interface ChatMessageDao {
             } else {
                 when (local.status) {
                     MessageStatus.SENT -> {
-                        if (serverMessage.status == MessageStatus.DELIVERED || serverMessage.status == MessageStatus.READ) serverMessage.status else local.status
-                    }
+                        if (serverMessage.status == MessageStatus.DELIVERED || serverMessage.status == MessageStatus.READ) serverMessage.status else local.status                                                             }
                     MessageStatus.DELIVERED -> {
                         if (serverMessage.status == MessageStatus.READ) serverMessage.status else local.status
                     }
-                    else -> local.status // If already READ, keep it READ. Ignore delayed DELIVERED events.
+                    else -> local.status
                 }
             }
 
@@ -64,13 +62,20 @@ interface ChatMessageDao {
                 null
             }
 
+            // 🚀 FIX: Prevent server from undeleting offline-deleted messages
+            val mergedDeletedAt = if (local.deletedAt != null || serverMessage.deletedAt != null) {
+                maxOf(local.deletedAt ?: 0L, serverMessage.deletedAt ?: 0L)
+            } else {
+                null
+            }
+
             updateMessageMerged(
                 id = serverMessage.id,
                 content = serverMessage.content,
                 status = mergedStatus,
                 isDeletedForMe = mergedDeletedForMe,
                 editedAt = mergedEditedAt,
-                deletedAt = serverMessage.deletedAt
+                deletedAt = mergedDeletedAt // 👈 এখানে mergedDeletedAt ব্যবহার করা হয়েছে
             )
         }
     }
@@ -84,11 +89,9 @@ interface ChatMessageDao {
     @Query("UPDATE messages SET content = :newContent, editedAt = :timestamp WHERE id = :messageId")
     suspend fun updateMessageContent(messageId: String, newContent: String, timestamp: Long)
 
-    // Delete for me - মেসেজটি UI থেকে পুরোপুরি রিমুভ করে দেবে
     @Query("UPDATE messages SET isDeletedForMe = 1 WHERE id = :messageId")
     suspend fun softDeleteForMe(messageId: String)
 
-    // Delete for everyone - মেসেজটির জায়গায় ডিলিট প্লেসহোল্ডার দেখাবে
     @Query("UPDATE messages SET deletedAt = :timestamp WHERE id = :messageId")
     suspend fun markAsDeletedForEveryone(messageId: String, timestamp: Long)
 

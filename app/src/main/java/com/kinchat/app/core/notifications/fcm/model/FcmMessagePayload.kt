@@ -7,7 +7,8 @@ data class FcmMessagePayload(
     val messageText: String,
     val senderId: String,
     val avatarUrl: String?,
-    val messageId: String
+    val messageId: String,
+    val createdAt: Long? = null
 ) {
     companion object {
         private const val KEY_TYPE = "type"
@@ -20,16 +21,20 @@ data class FcmMessagePayload(
         private const val KEY_AVATAR_URL = "avatar_url"
         private const val KEY_SENDER_AVATAR = "sender_avatar"
         private const val KEY_MESSAGE_ID = "message_id"
-
-        private const val TYPE_CHAT = "chat"
+        private const val KEY_CREATED_AT = "created_at"
+        
+        // 🚀 FIX: Accept both types for backward compatibility during migration
+        private val CHAT_TYPES = setOf("chat", "chat_message")
 
         fun from(data: Map<String, String>): FcmMessagePayload? {
             if (data.isEmpty()) return null
-            
+
             val type = data[KEY_TYPE]
-            if (type != TYPE_CHAT) return null
+            if (type !in CHAT_TYPES) return null
 
             val chatId = data[KEY_CHAT_ID] ?: return null
+            val createdAtStr = data[KEY_CREATED_AT]
+            val createdAt = createdAtStr?.toLongOrNull()
 
             return FcmMessagePayload(
                 type = type,
@@ -38,7 +43,8 @@ data class FcmMessagePayload(
                 messageText = data[KEY_BODY] ?: data[KEY_MESSAGE] ?: "New message",
                 senderId = data[KEY_SENDER_ID] ?: "",
                 avatarUrl = data[KEY_AVATAR_URL] ?: data[KEY_SENDER_AVATAR],
-                messageId = data[KEY_MESSAGE_ID] ?: System.currentTimeMillis().toString()
+                messageId = data[KEY_MESSAGE_ID] ?: System.currentTimeMillis().toString(),
+                createdAt = createdAt
             )
         }
     }

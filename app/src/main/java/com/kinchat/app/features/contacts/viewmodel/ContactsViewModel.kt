@@ -4,12 +4,9 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.kinchat.app.domain.model.UserContact
+import com.kinchat.app.domain.repository.ChatRepository
 import com.kinchat.app.domain.usecase.ContactsUseCases
 import dagger.hilt.android.lifecycle.HiltViewModel
-import io.github.jan.supabase.SupabaseClient
-import io.github.jan.supabase.gotrue.auth
-import io.github.jan.supabase.postgrest.postgrest
-import io.github.jan.supabase.postgrest.rpc
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -26,7 +23,7 @@ data class ContactsUiState(
 @HiltViewModel
 class ContactsViewModel @Inject constructor(
     private val contactsUseCases: ContactsUseCases,
-    private val supabaseClient: SupabaseClient
+    private val chatRepository: ChatRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ContactsUiState())
@@ -45,12 +42,18 @@ class ContactsViewModel @Inject constructor(
             .map { contacts ->
                 val uniqueRegistered = contacts
                     .filter { it.registeredUserId != null }
-                    .associateBy { contact ->
-                        val phoneDigits = contact.contactPhoneNormalized.replace(NON_DIGIT_REGEX, "")
-                        if (phoneDigits.length >= 10) phoneDigits.takeLast(10) else contact.registeredUserId ?: contact.id
-                    }.values.toList()
+                    .associateBy { it.registeredUserId }
+                    .values.toList()
+                
+                // 🚀 FIX: যে নাম্বারগুলো ইতিমধ্যে Registered, সেগুলো বের করে নিচ্ছি
+                val registeredPhones = uniqueRegistered.map { it.contactPhoneNormalized }.toSet()
+                
+                // 🚀 FIX: Unregistered লিস্ট থেকে Registered নাম্বারগুলো ফিল্টার আউট করে দিচ্ছি
+                val unregistered = contacts
+                    .filter { it.registeredUserId == null && it.contactPhoneNormalized !in registeredPhones }
+                    .associateBy { it.contactPhoneNormalized }
+                    .values.toList()
 
-                val unregistered = contacts.filter { it.registeredUserId == null }
                 Pair(uniqueRegistered, unregistered)
             }
             .flowOn(Dispatchers.Default)
@@ -73,12 +76,11 @@ class ContactsViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isSyncing = true, errorMsg = null) }
             val result = contactsUseCases.syncDeviceContacts()
-            
-            // লোকাল সিঙ্ক সফল হলে সার্ভার থেকেও রেজিস্টার্ড ইউজার চেক করে আপডেট করুন
+
             if (result.isSuccess) {
                 contactsUseCases.loadRemoteContacts()
             }
-            
+
             _uiState.update { it.copy(isSyncing = false, errorMsg = result.errorMessage) }
         }
     }
@@ -86,29 +88,16 @@ class ContactsViewModel @Inject constructor(
     fun openChatWithUser(partnerUserId: String) {
         viewModelScope.launch(Dispatchers.IO) {
             _uiState.update { it.copy(isLoading = true, errorMsg = null) }
-            try {
-                val currentUserId = supabaseClient.auth.currentUserOrNull()?.id
-                if (currentUserId != null) {
-                    val response = supabaseClient.postgrest.rpc(
-                        "create_chat_if_not_exists",
-                        mapOf("user1_id" to currentUserId, "user2_id" to partnerUserId)
-                    ).decodeAsOrNull<String>()
 
-                    val chatId = response?.replace("\"", "")
-                    if (!chatId.isNullOrBlank()) {
-                        _resolvedChatId.value = chatId
-                    } else {
-                        _uiState.update { it.copy(errorMsg = "Failed to create chat room.") }
-                    }
-                } else {
-                    _uiState.update { it.copy(errorMsg = "User not authenticated.") }
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Error resolving chat ID", e)
-                _uiState.update { it.copy(errorMsg = "Network error: ${e.localizedMessage}") }
-            } finally {
-                _uiState.update { it.copy(isLoading = false) }
+            val result = chatRepository.createChatIfNotExists(partnerUserId)
+
+            if (result.isSuccess) {
+                _resolvedChatId.value = result.getOrNull()
+            } else {
+                _uiState.update { it.copy(errorMsg = result.exceptionOrNull()?.message ?: "Failed to open chat.") }
             }
+
+            _uiState.update { it.copy(isLoading = false) }
         }
     }
 

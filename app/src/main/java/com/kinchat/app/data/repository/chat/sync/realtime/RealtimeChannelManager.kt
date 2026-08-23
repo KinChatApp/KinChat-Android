@@ -23,7 +23,7 @@ import javax.inject.Singleton
 class RealtimeChannelManager @Inject constructor(
     private val supabaseClient: SupabaseClient,
     private val realtimeMessageHandler: RealtimeMessageHandler,
-    private val missedMessageFetcher: MissedMessageFetcher 
+    private val missedMessageFetcher: MissedMessageFetcher
 ) {
     private val activeChannels = ConcurrentHashMap<String, RealtimeChannel>()
     private val channelJobs = ConcurrentHashMap<String, Job>()
@@ -52,26 +52,39 @@ class RealtimeChannelManager @Inject constructor(
                     filter = "$COLUMN_CHAT_ID=eq.$chatId"
                 }
 
+                // 🚀 FIX: চাইল্ড Coroutine-এর ভেতর try-catch দেওয়া হলো যেন নেটওয়ার্ক ফেইল করলে প্যারেন্ট ক্র্যাশ না করে
                 launch {
-                    messagesFlow.collect { action ->
-                        Log.d(TAG, "Realtime action received for $chatId: ${action::class.simpleName}")
-                        realtimeMessageHandler.handleAction(action, chatId)
+                    try {
+                        messagesFlow.collect { action ->
+                            Log.d(TAG, "Realtime action received for $chatId: ${action::class.simpleName}")
+                            realtimeMessageHandler.handleAction(action, chatId)
+                        }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Socket or Flow error in messages for $chatId", e)
                     }
                 }
 
+                // 🚀 FIX: Status ফ্লো-তেও সেইম try-catch লজিক
                 launch {
-                    channel.status.collect { status ->
-                        Log.d(TAG, "Channel status for $chatId is now: $status")
-                        // 🚀 BUG FIX: Safe String checking immune to SDK enum version changes (SUBSCRIBED / JOINED)
-                        val statusStr = status.name.uppercase()
-                        if (statusStr == "SUBSCRIBED" || statusStr == "JOINED") {
-                            try {
-                                Log.d(TAG, "Reconnected! Fetching any missed messages for $chatId...")
-                                missedMessageFetcher.fetchMissedMessages(chatId)
-                            } catch (e: Exception) {
-                                Log.e(TAG, "Failed to fetch missed messages upon reconnect for $chatId", e)
+                    try {
+                        channel.status.collect { status ->
+                            Log.d(TAG, "Channel status for $chatId is now: $status")
+                            val statusStr = status.name.uppercase()
+                            if (statusStr == "SUBSCRIBED" || statusStr == "JOINED") {
+                                try {
+                                    Log.d(TAG, "Reconnected! Fetching any missed messages for $chatId...")
+                                    missedMessageFetcher.fetchMissedMessages(chatId)
+                                } catch (e: Exception) {
+                                    Log.e(TAG, "Failed to fetch missed messages upon reconnect for $chatId", e)
+                                }
                             }
                         }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Status collection error for $chatId", e)
                     }
                 }
 

@@ -32,5 +32,6 @@ data class WorkerChatParticipantUpdateDto(
     val is_muted: Boolean? = null,
     val is_archived: Boolean? = null,
     val is_deleted: Boolean? = null,
-    val last_read_at: String? = null
+    val last_read_at: String? = null,
+    val is_favorite: Boolean? = null // 🚀 FIX: Added missing parameter
 )

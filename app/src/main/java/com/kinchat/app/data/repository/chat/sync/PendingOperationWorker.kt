@@ -1,11 +1,11 @@
 package com.kinchat.app.data.repository.chat.sync
 
 import android.content.Context
-import android.util.Log
 import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.kinchat.app.core.logging.DebugLogger
+import com.kinchat.app.data.local.db.OperationType
 import com.kinchat.app.data.local.db.PendingOperationDao
 import com.kinchat.app.data.repository.chat.sync.handlers.PendingOperationDispatcher
 import dagger.assisted.Assisted
@@ -23,11 +23,21 @@ class PendingOperationWorker @AssistedInject constructor(
     private val operationDispatcher: PendingOperationDispatcher
 ) : CoroutineWorker(context, params) {
 
-    private val currentUserId: String?
-        get() = supabaseClient.auth.currentUserOrNull()?.id
-
     override suspend fun doWork(): Result {
-        val pendingOps = pendingOperationDao.getAllPendingOperations()
+        val rawOps = pendingOperationDao.getAllPendingOperations()
+        val currentUserId = supabaseClient.auth.currentUserOrNull()?.id
+
+        // 🚀 FIX: CREATE_CHAT যেন SEND_MESSAGE এর আগে এক্সিকিউট হয় সেজন্য সর্টিং করা হলো
+        val pendingOps = rawOps.sortedWith(
+            compareBy<com.kinchat.app.data.local.db.PendingOperationEntity> {
+                when (it.type) {
+                    OperationType.CREATE_CHAT -> 1
+                    OperationType.SEND_MESSAGE -> 2
+                    else -> 3
+                }
+            }.thenBy { it.createdAt }
+        )
+
         DebugLogger.log(
             applicationContext,
             "PendingWorker",
@@ -50,9 +60,9 @@ class PendingOperationWorker @AssistedInject constructor(
             } catch (e: Exception) {
                 val errorMsg = e.message ?: "Unknown exception"
                 failedReferenceIds.add(op.referenceId)
-                
-                // 🚀 PRO-FIX: Strict categorization to maintain WorkManager and DB semantics parity
-                val isUnrecoverable = e is IllegalArgumentException || errorMsg.contains("invalid input syntax") || errorMsg.contains("400")
+                DebugLogger.log(applicationContext, "PendingWorker", "Operation failed [${op.type}]: $errorMsg")
+
+                val isUnrecoverable = e is IllegalArgumentException || (errorMsg.contains("invalid input syntax") && !errorMsg.contains("foreign key", ignoreCase = true))
                 val isNetworkError = e is IOException || errorMsg.contains("timeout", ignoreCase = true) || errorMsg.contains("network", ignoreCase = true) || errorMsg.contains("Failed to connect", ignoreCase = true)
 
                 if (isUnrecoverable) {
@@ -60,8 +70,6 @@ class PendingOperationWorker @AssistedInject constructor(
                     pendingOperationDao.updateOperation(deadOp)
                 } else if (isNetworkError) {
                     hasRecoverableFailure = true
-                    // Do NOT increment attempt or change state to FAILED.
-                    // Keep it PENDING so the DAO fetches it again, but WorkManager will handle the delay via Result.retry().
                     val networkOp = op.copy(lastError = "Network error: $errorMsg", status = "PENDING")
                     pendingOperationDao.updateOperation(networkOp)
                 } else {

@@ -10,9 +10,11 @@ import androidx.lifecycle.viewModelScope
 import com.kinchat.app.core.logging.AppLogger
 import com.kinchat.app.core.notifications.builder.NotificationSummaryManager
 import com.kinchat.app.domain.model.ChatMessage
+import com.kinchat.app.domain.repository.AuthRepository
 import com.kinchat.app.domain.repository.ChatRepository
 import com.kinchat.app.data.repository.chat.sync.ChatSyncManager
 import com.kinchat.app.domain.usecase.ContactsUseCases
+import com.kinchat.app.domain.usecase.ChatSetupUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
@@ -32,7 +34,8 @@ class ChatViewModel @Inject constructor(
     private val chatRepository: ChatRepository,
     private val chatSetupUseCase: ChatSetupUseCase,
     private val chatSyncManager: ChatSyncManager,
-    private val contactsUseCases: ContactsUseCases
+    private val contactsUseCases: ContactsUseCases,
+    private val authRepository: AuthRepository // 🚀 FIX: AuthRepository যোগ করা হয়েছে
 ) : ViewModel() {
 
     private val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager?
@@ -61,8 +64,6 @@ class ChatViewModel @Inject constructor(
     private var chatObservingJob: Job? = null
     private var roomObserveJob: Job? = null
 
-    // এই চ্যাটের জন্য কন্টাক্ট নাম পাওয়া গিয়েছিল কিনা, সেটা মনে রাখার জন্য
-    // (পরে ব্যাকগ্রাউন্ড setup থেকে আসা প্রোফাইল নাম যেন এই কন্টাক্ট নামকে ওভাররাইট না করে)
     private var resolvedContactName: String? = null
 
     init {
@@ -86,13 +87,25 @@ class ChatViewModel @Inject constructor(
     fun initializeChat(passedId: String) {
         if (initialPassedId == passedId && currentChatId != null) return
 
+        if (currentChatId != null && currentChatId != passedId) {
+            _messages.value = emptyList()
+            clearSelection()
+        }
+
         initialPassedId = passedId
         resolvedContactName = null
         chatObservingJob?.cancel()
 
         chatObservingJob = viewModelScope.launch {
-            // 🚀 DB নাম ও কন্টাক্ট নাম — দুইটাই একসাথে (প্যারালাল) লোড করা হচ্ছে,
-            // যাতে দুই ধাপে আলাদা আলাদা emit (flicker) না হয়ে একবারেই ফাইনাল নাম দেখায়।
+            // 🚀 FIX: মেসেজ অবজার্ভ করার আগেই কারেন্ট ইউজার আইডি সেট করা হলো!
+            if (currentUserId.isEmpty()) {
+                currentUserId = authRepository.getCurrentUserId() ?: ""
+            }
+
+            // 🚀 FAST RENDER: এখন মেসেজ লোড হলে অ্যাপ ঠিকভাবে চিনবে কোনটা তোমার মেসেজ
+            roomObserveJob?.cancel()
+            roomObserveJob = launch { observeMessagesForChat(passedId) }
+
             val instantInfoDeferred = async { chatSetupUseCase.getInstantPartnerInfo(passedId) }
             val contactsDeferred = async { contactsUseCases.getContacts().firstOrNull() ?: emptyList() }
 
@@ -101,21 +114,16 @@ class ChatViewModel @Inject constructor(
             val contactName = contacts.find { it.registeredUserId == instantPartnerId }?.contactName?.takeIf { it.isNotBlank() }
             resolvedContactName = contactName
 
-            // 🚀 প্রায়োরিটি: কন্টাক্ট বুকের নাম > প্রোফাইল/DB নাম > "Unknown"
             val initialName = contactName ?: instantQuickName ?: "Unknown"
 
-            // 🚀 কোনো Loading state ছাড়াই সরাসরি ফাইনাল নাম নিয়ে Success — একবারেই দেখাবে
             _partnerState.value = PartnerUiState.Success(id = instantPartnerId.ifEmpty { passedId }, name = initialName)
 
-            // এরপর ব্যাকগ্রাউন্ডে বাকি ইনিশিয়ালাইজেশন (chat setup, realtime, sync) চলতে থাকবে
             val setupResult = chatSetupUseCase.execute(passedId, initialName)
 
             if (setupResult != null) {
-                currentUserId = setupResult.currentUserId
+                currentUserId = setupResult.currentUserId // Safety fallback
                 val resolvedChatId = setupResult.actualChatId
 
-                // কন্টাক্ট নাম আগে থেকেই থাকলে সেটাকে প্রোফাইল নাম দিয়ে ওভাররাইট করা হবে না।
-                // কন্টাক্ট নাম না থাকলে ও এখনো "Unknown" থাকলে, তখনই প্রোফাইল নাম বসবে।
                 if (resolvedContactName == null && setupResult.partnerName != null && setupResult.partnerName != "Unknown") {
                     val current = _partnerState.value
                     if (current is PartnerUiState.Success && current.name == "Unknown") {
@@ -138,8 +146,10 @@ class ChatViewModel @Inject constructor(
                         }
                     }
 
-                    roomObserveJob?.cancel()
-                    roomObserveJob = launch { observeMessagesForChat(resolvedChatId) }
+                    if (passedId != resolvedChatId) {
+                        roomObserveJob?.cancel()
+                        roomObserveJob = launch { observeMessagesForChat(resolvedChatId) }
+                    }
                 }
             }
         }

@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
-
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
@@ -22,7 +21,6 @@
     <uses-permission android:name="android.permission.READ_MEDIA_VISUAL_USER_SELECTED" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="29" />
-
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
@@ -44,7 +42,7 @@
         android:enableOnBackInvokedCallback="true"
         tools:targetApi="34">
 
-        <!-- 🚀 NEW: OneSignal Notification Extension -->
+        <!-- 🚀 OneSignal Notification Extension -->
         <meta-data
             android:name="com.onesignal.NotificationServiceExtension"
             android:value="com.kinchat.app.core.notifications.onesignal.NotificationExtension" />
@@ -83,15 +81,6 @@
             </intent-filter>
         </activity>
 
-        <!-- FCM Service (Will run alongside OneSignal) -->
-        <service
-            android:name=".core.notifications.fcm.KinChatMessagingService"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="com.google.firebase.MESSAGING_EVENT" />
-            </intent-filter>
-        </service>
-
         <receiver
             android:name=".core.notifications.actions.NotificationActionReceiver"
             android:exported="false">
@@ -100,7 +89,5 @@
                 <action android:name="com.kinchat.app.ACTION_MARK_READ" />
             </intent-filter>
         </receiver>
-
     </application>
-
 </manifest>

@@ -41,31 +41,32 @@ fun ChatMessageList(
     onMessageAction: (MessageAction) -> Unit
 ) {
     val scope = rememberCoroutineScope()
-    
-    // ইউজার লিস্টের শেষে না থাকলে ফ্লোটিং বাটন দেখাবে
-    val showScrollToBottom by remember { 
-        derivedStateOf { 
-            val layoutInfo = listState.layoutInfo
-            val visibleItems = layoutInfo.visibleItemsInfo
-            if (visibleItems.isEmpty()) false
-            else visibleItems.last().index < chatItems.size - 2
-        } 
+
+    // 🚀 FIX: মেসেজগুলোকে উল্টে দেওয়া হলো যেন নতুন মেসেজ index 0 তে থাকে
+    val reversedItems = remember(chatItems) { chatItems.reversed() }
+
+    // 🚀 FIX: ইউজার যদি উপরের দিকে স্ক্রল করে (firstVisibleItemIndex > 1), তখন বাটন দেখাবে
+    val showScrollToBottom by remember {
+        derivedStateOf {
+            listState.firstVisibleItemIndex > 2
+        }
     }
 
-    // নতুন মেসেজ এলে অটোমেটিক একদম নিচের মেসেজে স্ক্রল করবে
-    LaunchedEffect(messagesCount, chatItems.size) {
-        if (chatItems.isNotEmpty()) {
-            listState.animateScrollToItem(chatItems.size - 1)
+    // 🚀 FIX: নতুন মেসেজ এলে অটোমেটিক নিচে (index 0) স্ক্রল করবে (যদি ইউজার নিচে থাকে)
+    LaunchedEffect(messagesCount) {
+        if (reversedItems.isNotEmpty() && listState.firstVisibleItemIndex <= 2) {
+            listState.animateScrollToItem(0)
         }
     }
 
     LazyColumn(
         state = listState,
         modifier = Modifier.fillMaxSize(),
+        reverseLayout = true, // 🚀 FIX: লিস্ট নিচ থেকে শুরু হবে, তাই জিরো-ল্যাগ!
         contentPadding = PaddingValues(top = 12.dp, bottom = 12.dp)
     ) {
         items(
-            items = chatItems,
+            items = reversedItems,
             key = {
                 when (it) {
                     is ChatListItem.Msg -> it.uiModel.id
@@ -98,12 +99,12 @@ fun ChatMessageList(
         exit = fadeOut() + scaleOut()
     ) {
         SmallFloatingActionButton(
-            onClick = { 
-                scope.launch { 
-                    if (chatItems.isNotEmpty()) {
-                        listState.animateScrollToItem(chatItems.size - 1) 
+            onClick = {
+                scope.launch {
+                    if (reversedItems.isNotEmpty()) {
+                        listState.animateScrollToItem(0) // 🚀 FIX: একদম নিচে মানে এখন index 0
                     }
-                } 
+                }
             },
             containerColor = MaterialTheme.colorScheme.primaryContainer,
             contentColor = MaterialTheme.colorScheme.onPrimaryContainer

@@ -22,6 +22,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun ChatScreen(
     chatId: String,
+    initialName: String = "", // 🚀 Dashboard থেকে পাঠানো নাম রিসিভ করা হচ্ছে
     returnedMediaUris: List<Uri>? = null,
     returnedCaption: String? = null,
     returnedReplyId: String? = null,
@@ -49,7 +50,6 @@ fun ChatScreen(
 
     LaunchedEffect(chatId) { viewModel.initializeChat(chatId) }
 
-    // Handle returned media from Custom Media Picker
     LaunchedEffect(returnedMediaUris) {
         if (!returnedMediaUris.isNullOrEmpty()) {
             viewModel.sendAttachments(returnedMediaUris, returnedReplyId, returnedCaption)
@@ -57,7 +57,8 @@ fun ChatScreen(
         }
     }
 
-    val displayName = (partnerState as? PartnerUiState.Success)?.name ?: "Loading..."
+    // 🚀 FIXED: ডাটাবেস থেকে ফ্রেশ নাম আসার আগ পর্যন্ত initialName দেখাবে, তাই ব্ল্যাংক থাকবে না!
+    val displayName = (partnerState as? PartnerUiState.Success)?.name ?: initialName
     val partnerId = (partnerState as? PartnerUiState.Success)?.id ?: ""
 
     val selectedMsgsList = remember(selectedMessages, messages) {

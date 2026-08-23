@@ -14,6 +14,7 @@ import io.github.jan.supabase.storage.Storage
 import io.github.jan.supabase.realtime.Realtime
 import io.github.jan.supabase.functions.Functions
 import io.ktor.client.engine.okhttp.OkHttp
+import java.util.concurrent.TimeUnit
 import javax.inject.Singleton
 
 @Module
@@ -35,8 +36,14 @@ object SupabaseModule {
                 install(Realtime)
                 install(Functions) // 🚀 Edge Functions
 
-                // WebSocket (Realtime)
-                httpEngine = OkHttp.create()
+                // 🚀 FIX: WebSocket-কে জীবিত রাখার জন্য Ping Interval এবং Retry লজিক যোগ করা হলো
+                httpEngine = OkHttp.create {
+                    config {
+                        retryOnConnectionFailure(true)
+                        pingInterval(15, TimeUnit.SECONDS)
+                        readTimeout(30, TimeUnit.SECONDS)
+                    }
+                }
             }
             AppLogger.i("SupabaseConfig", "✅ Supabase Client Initialized Successfully")
             client

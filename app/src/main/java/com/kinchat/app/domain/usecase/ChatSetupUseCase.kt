@@ -1,18 +1,10 @@
-package com.kinchat.app.features.chat.viewmodel
+package com.kinchat.app.domain.usecase
 
 import com.kinchat.app.data.local.db.ChatDao
+import com.kinchat.app.domain.repository.AuthRepository
 import com.kinchat.app.domain.repository.ChatRepository
-import io.github.jan.supabase.SupabaseClient
-import io.github.jan.supabase.gotrue.auth
-import io.github.jan.supabase.postgrest.postgrest
-import io.github.jan.supabase.postgrest.rpc
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.firstOrNull
-import kotlinx.serialization.Serializable
 import javax.inject.Inject
-
-@Serializable
-private data class ParticipantDto(val chat_id: String? = null, val user_id: String)
 
 data class ChatSetupResult(
     val actualChatId: String,
@@ -23,20 +15,18 @@ data class ChatSetupResult(
 
 class ChatSetupUseCase @Inject constructor(
     private val chatRepository: ChatRepository,
-    private val supabaseClient: SupabaseClient,
+    private val authRepository: AuthRepository,
     private val chatDao: ChatDao
 ) {
     private val AI_BOT_ID = "de438bb4-d954-4c31-9ad1-9dd34b85d981"
 
-    // 🚀 NEW FIX: UI-কে সাথে সাথে নাম দেওয়ার জন্য ইনস্ট্যান্ট ডাটাবেজ লুকআপ (No Loading Delay)
     suspend fun getInstantPartnerInfo(passedId: String): Pair<String, String?> {
         if (passedId == AI_BOT_ID) return Pair(AI_BOT_ID, "TukTak AI")
-        
-        val currentUserId = supabaseClient.auth.currentUserOrNull()?.id ?: ""
+
+        val currentUserId = authRepository.getCurrentUserId() ?: ""
         val localPreview = chatDao.observeChatPreview(passedId).firstOrNull()
-        
+
         if (localPreview != null) {
-            // চ্যাট আইডি দিয়ে লোকাল ডাটাবেজ থেকে সাথে সাথে আসল ইউজার আইডি বের করে আনা হচ্ছে
             val partnerId = localPreview.participants.firstOrNull { it.userId != currentUserId }?.userId
             val partnerName = chatDao.getChatTitle(passedId)
             if (partnerId != null) return Pair(partnerId, partnerName)
@@ -45,16 +35,7 @@ class ChatSetupUseCase @Inject constructor(
     }
 
     suspend fun execute(passedId: String, quickName: String?): ChatSetupResult? {
-        var user = supabaseClient.auth.currentUserOrNull()
-        var retryCount = 0
-
-        while (user == null && retryCount < 5) {
-            delay(300)
-            user = supabaseClient.auth.currentUserOrNull()
-            retryCount++
-        }
-
-        val currentUserId = user?.id ?: return null
+        val currentUserId = authRepository.getCurrentUserId() ?: return null
         if (passedId.isEmpty()) return null
 
         if (passedId == AI_BOT_ID) {
@@ -73,19 +54,9 @@ class ChatSetupUseCase @Inject constructor(
             if (isLocalChat) {
                 actualChatId = passedId
                 val localPartnerId = localPreview?.participants?.firstOrNull { it.userId != currentUserId }?.userId
-                
+
                 if (localPartnerId != null) {
                     partnerId = localPartnerId
-                } else {
-                    try {
-                        val participants = supabaseClient.postgrest["chat_participants"]
-                            .select { filter { eq("chat_id", passedId) } }
-                            .decodeList<ParticipantDto>()
-                        val pId = participants.firstOrNull { it.user_id != currentUserId }?.user_id
-                        if (pId != null) partnerId = pId
-                    } catch (e: Exception) {
-                        // Offline fallback
-                    }
                 }
 
                 if (partnerName.isNullOrEmpty()) {
@@ -94,18 +65,13 @@ class ChatSetupUseCase @Inject constructor(
             } else {
                 partnerId = passedId
 
-                try {
-                    val response = supabaseClient.postgrest.rpc(
-                        "create_chat_if_not_exists",
-                        mapOf("user1_id" to currentUserId, "user2_id" to partnerId)
-                    ).decodeAs<String>()
-
-                    actualChatId = response.replace("\"", "")
+                val result = chatRepository.createChatIfNotExists(partnerId)
+                if (result.isSuccess) {
+                    actualChatId = result.getOrNull() ?: passedId
                     if (partnerName.isNullOrEmpty()) {
                         partnerName = chatRepository.getPartnerName(actualChatId, currentUserId)
                     }
-                } catch (e: Exception) {
-                    e.printStackTrace()
+                } else {
                     actualChatId = passedId
                 }
             }

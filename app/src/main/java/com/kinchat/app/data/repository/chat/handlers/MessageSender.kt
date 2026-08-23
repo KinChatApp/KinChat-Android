@@ -36,7 +36,7 @@ class MessageSender(
             createdAt = timestamp
         )
         chatMessageDao.insertMessage(entity)
-        
+
         dbHelper.ensureChatExistsAndUpdateLastMessage(chatId, senderId, messageId, timestamp)
 
         val wordCount = content.split("\\s+".toRegex()).count { it.isNotEmpty() }
@@ -44,8 +44,9 @@ class MessageSender(
         val isoTimestamp = Instant.ofEpochMilli(timestamp).toString()
 
         chatInsightsDao.incrementMyMessageCount(chatId, wordCount, charCount, isoTimestamp)
-        
-        dbHelper.queuePendingOperation(OperationType.SEND_MESSAGE, messageId, null, timestamp)
+
+        // 🚀 FIX: CREATE_CHAT এর টাইমস্ট্যাম্পের সাথে সাংঘর্ষিক না হওয়ার জন্য +1 যোগ করা হলো
+        dbHelper.queuePendingOperation(OperationType.SEND_MESSAGE, messageId, null, timestamp + 1)
     }.onSuccess {
         AppLogger.i("MessageSender", "✅ Message $messageId saved locally & added to PendingSync")
     }.onFailure {

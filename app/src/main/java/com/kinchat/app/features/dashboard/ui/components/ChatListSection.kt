@@ -18,11 +18,13 @@ import com.kinchat.app.features.chat.ui.components.ChatListSkeleton
 fun ChatListSection(
     isLoading: Boolean,
     chats: List<Chat>,
-    onChatClick: (String) -> Unit,
+    onChatClick: (String, String) -> Unit,
     onChatLongPress: (Chat) -> Unit
 ) {
     Box(modifier = Modifier.fillMaxSize()) {
-        if (isLoading) {
+        // 🚀 যেহেতু এখন RAM থেকে ডেটা আসবে, তাই বারবার ঢুকলে chats.isEmpty() আর সত্য হবে না।
+        // স্কেলেটন শুধুমাত্র অ্যাপ রিস্টার্ট দেওয়ার পর প্রথমবার ডেটাবেজ লোড হতে যতটুকু সময় লাগে, শুধু তখনই দেখাবে।
+        if (isLoading && chats.isEmpty()) {
             Column {
                 repeat(5) { ChatListSkeleton() }
             }
@@ -35,7 +37,7 @@ fun ChatListSection(
                 items(chats, key = { it.id }) { chat ->
                     ChatListItem(
                         chat = chat,
-                        onClick = { onChatClick(chat.id) },
+                        onClick = { onChatClick(chat.id, chat.name) },
                         onLongPress = { onChatLongPress(chat) }
                     )
                 }

@@ -27,12 +27,11 @@ import com.kinchat.app.core.utils.BatteryOptimizationHelper
 import com.kinchat.app.core.logging.CrashLogManager
 import com.kinchat.app.core.logging.AppLogger
 import com.kinchat.app.domain.model.UserSettings
+import com.kinchat.app.domain.repository.AppAuthState
 import com.kinchat.app.domain.repository.AuthRepository
 import com.kinchat.app.domain.repository.SettingsRepository
 import com.kinchat.app.navigation.AppNavigation
 import com.kinchat.app.navigation.NavRoutes
-import io.github.jan.supabase.SupabaseClient
-import io.github.jan.supabase.gotrue.auth
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
@@ -49,11 +48,7 @@ class MainActivity : ComponentActivity() {
     @Inject
     lateinit var settingsRepository: SettingsRepository
 
-    @Inject
-    lateinit var supabaseClient: SupabaseClient
-
     private lateinit var crashLogManager: CrashLogManager
-
     private val pendingChatId = MutableStateFlow<String?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -64,27 +59,23 @@ class MainActivity : ComponentActivity() {
         crashLogManager.setupExceptionHandler()
         handleNotificationIntent(intent)
 
-        // 🚀 সুপার ফাস্ট সিঙ্ক্রোনাস লগইন চেক (মিলি-সেকেন্ডে কাজ করবে)
         val prefs = getSharedPreferences("ZegoPrefs", Context.MODE_PRIVATE)
         val savedUserId = prefs.getString("userId", null)
         val initialRoute = if (!savedUserId.isNullOrBlank()) NavRoutes.DASHBOARD else NavRoutes.LOGIN
 
+        // 🚀 FIX: Observing abstract AuthState instead of Supabase SessionStatus
         lifecycleScope.launch(Dispatchers.IO) {
-            supabaseClient.auth.sessionStatus.collect { status ->
-                when (status) {
-                    is io.github.jan.supabase.gotrue.SessionStatus.Authenticated -> {
-                        val user = status.session.user
-                        val currentUserId = user?.id?.replace("-", "")?.trim()
-                        val currentUserName = user?.phone ?: user?.email ?: "KinChat User"
-
-                        if (!currentUserId.isNullOrBlank()) {
-                            prefs.edit().putString("userId", currentUserId).putString("userName", currentUserName).apply()
+            authRepository.observeAuthState().collect { state ->
+                when (state) {
+                    is AppAuthState.Authenticated -> {
+                        if (state.userId.isNotBlank()) {
+                            prefs.edit().putString("userId", state.userId).putString("userName", state.userName).apply()
                             launch(Dispatchers.Main) {
-                                (application as KinChatApplication).initZegoCloud(currentUserId, currentUserName)
+                                (application as KinChatApplication).initZegoCloud(state.userId, state.userName)
                             }
                         }
                     }
-                    is io.github.jan.supabase.gotrue.SessionStatus.NotAuthenticated -> {
+                    is AppAuthState.Unauthenticated -> {
                         prefs.edit().clear().apply()
                         launch(Dispatchers.Main) {
                             ZegoUIKitPrebuiltCallService.unInit()
@@ -133,9 +124,8 @@ class MainActivity : ComponentActivity() {
                     }
 
                     MainLayout {
-                        // 🚀 সরাসরি initialRoute পাঠিয়ে দেওয়া হলো
                         AppNavigation(
-                            navController = navController, 
+                            navController = navController,
                             startDestination = initialRoute
                         )
                     }

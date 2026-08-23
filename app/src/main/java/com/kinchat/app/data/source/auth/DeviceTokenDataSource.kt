@@ -22,6 +22,7 @@ class DeviceTokenDataSourceImpl @Inject constructor(
                 supabase.from("user_devices").delete {
                     filter { eq("user_id", userId) }
                 }
+                AppLogger.d("FCM_SYNC", "✅ Cleared device tokens for user: $userId")
             } catch (e: Exception) {
                 AppLogger.e("FCM_SYNC", "Error clearing tokens: ${e.message}", e)
             }
@@ -31,18 +32,16 @@ class DeviceTokenDataSourceImpl @Inject constructor(
     override suspend fun saveDeviceToken(userId: String, token: String) {
         withContext(Dispatchers.IO) {
             try {
-                // সরাসরি ভ্যালুগুলো দিয়ে দেওয়া হলো, যাতে JSON-এ মিসিং না হয়
                 val deviceData = DeviceTokenDto(
                     userId = userId,
                     deviceToken = token,
-                    deviceType = "android", 
+                    deviceType = "onesignal_android",
                     isActive = true
                 )
-                AppLogger.d("FCM_SYNC", "Attempting to save token to Supabase for user: $userId")
                 supabase.from("user_devices").upsert(deviceData)
                 AppLogger.d("FCM_SYNC", "✅ Successfully saved token to Supabase!")
             } catch (e: Exception) {
-                AppLogger.e("FCM_SYNC", "❌ Supabase Insert/Upsert Failed. Reason: ${e.message}", e)
+                AppLogger.e("FCM_SYNC", "❌ Supabase Insert/Upsert Failed.", e)
                 throw e
             }
         }

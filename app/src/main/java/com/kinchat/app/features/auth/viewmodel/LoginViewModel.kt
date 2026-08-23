@@ -4,13 +4,12 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.kinchat.app.BuildConfig
 import com.kinchat.app.core.logging.AppLogger
-import com.kinchat.app.data.local.datastore.AuthPreferencesManager
 import com.kinchat.app.data.local.datastore.UserPreferencesManager
-import com.kinchat.app.data.source.auth.SupabaseAuthDataSource
 import com.kinchat.app.domain.repository.AuthRepository
 import com.kinchat.app.domain.repository.RequestOtpResult
 import com.kinchat.app.features.auth.domain.provider.FcmTokenProvider
 import com.kinchat.app.features.auth.utils.PhoneFormatter
+import com.onesignal.OneSignal
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -23,8 +22,6 @@ import javax.inject.Inject
 class LoginViewModel @Inject constructor(
     private val repository: AuthRepository,
     private val userPreferencesManager: UserPreferencesManager,
-    private val authPreferencesManager: AuthPreferencesManager,
-    private val supabaseAuthDataSource: SupabaseAuthDataSource,
     private val fcmTokenProvider: FcmTokenProvider
 ) : ViewModel() {
 
@@ -84,7 +81,12 @@ class LoginViewModel @Inject constructor(
             _uiState.update { it.copy(isLoading = true, error = null) }
             val result = repository.verifyOtp(fullPhone, if (state.isNewUser) state.email else null, state.otp, state.isNewUser)
             if (result.isSuccess) {
-                supabaseAuthDataSource.getCurrentUserId()?.let { authPreferencesManager.setMeId(it) }
+                // 🚀 Link User to OneSignal on successful login
+                repository.getCurrentUserId()?.let { userId ->
+                    OneSignal.login(userId)
+                    AppLogger.d("OneSignal", "✅ User logged into OneSignal Identity with ID: $userId")
+                }
+                
                 syncFcmToken()
                 _uiState.update { it.copy(isLoading = false, isSuccess = true) }
             } else {
@@ -127,7 +129,12 @@ class LoginViewModel @Inject constructor(
         viewModelScope.launch {
             val result = repository.verifyOtp(fullPhone, if (isNewUser) email else null, otp, isNewUser)
             if (result.isSuccess) {
-                supabaseAuthDataSource.getCurrentUserId()?.let { authPreferencesManager.setMeId(it) }
+                // 🚀 Link User to OneSignal on successful Quick login
+                repository.getCurrentUserId()?.let { userId ->
+                    OneSignal.login(userId)
+                    AppLogger.d("OneSignal", "✅ User logged into OneSignal Identity with ID: $userId")
+                }
+                
                 syncFcmToken()
                 _uiState.update { it.copy(isLoading = false, isSuccess = true) }
             } else {
@@ -137,20 +144,20 @@ class LoginViewModel @Inject constructor(
     }
 
     private suspend fun syncFcmToken() {
-        AppLogger.d("FCM_SYNC", "--- Starting FCM Token Sync Process ---")
+        AppLogger.d("FCM_SYNC", "--- Starting Token Sync Process ---")
         try {
             val fcmToken = fcmTokenProvider.getToken()
             if (fcmToken != null) {
                 AppLogger.d("FCM_SYNC", "Fetched Token: $fcmToken")
                 val result = repository.updateFcmToken(fcmToken)
-                
+
                 if (result.isSuccess) {
                     AppLogger.d("FCM_SYNC", "✅ Token successfully saved via Repository")
                 } else {
                     AppLogger.e("FCM_SYNC", "❌ Repository failed to save token: ${result.exceptionOrNull()?.message}")
                 }
             } else {
-                AppLogger.e("FCM_SYNC", "❌ Token is NULL! Firebase/OneSignal failed to generate token.")
+                AppLogger.e("FCM_SYNC", "❌ Token is NULL! OneSignal failed to generate subscription ID.")
             }
         } catch (e: Exception) {
             AppLogger.e("FCM_SYNC", "❌ Exception inside syncFcmToken: ${e.message}", e)

@@ -23,13 +23,18 @@ fun NavGraphBuilder.chatNavGraph(navController: NavHostController) {
                 type = NavType.StringType
                 nullable = true
                 defaultValue = null
+            },
+            // 🚀 নতুন আর্গুমেন্ট রিসিভ করা হচ্ছে
+            navArgument(NavRoutes.CHAT_NAME_ARG) {
+                type = NavType.StringType
+                nullable = true
+                defaultValue = null
             }
         )
     ) { backStackEntry ->
         val chatId = backStackEntry.arguments?.getString(NavRoutes.CHAT_ID_ARG) ?: ""
+        val chatName = backStackEntry.arguments?.getString(NavRoutes.CHAT_NAME_ARG) ?: ""
 
-        // Get results back from Media Picker (consume immediately so a
-        // recreation/process-death can never re-send the same media twice).
         val savedStateHandle = backStackEntry.savedStateHandle
         val selectedMedia = savedStateHandle.get<List<String>>("selected_media_uris")
         val caption = savedStateHandle.get<String>("selected_media_caption")
@@ -42,12 +47,13 @@ fun NavGraphBuilder.chatNavGraph(navController: NavHostController) {
 
         ChatScreen(
             chatId = chatId,
+            initialName = chatName, // 🚀 আগে থেকেই নাম পাঠিয়ে দেওয়া হলো
             returnedMediaUris = selectedMedia?.map { Uri.parse(it) },
             returnedCaption = caption,
             returnedReplyId = replyId,
             onBack = { navController.popBackStack() },
             onNavigateToInfo = { id -> navController.navigate(NavRoutes.chatInfoRoute(id)) },
-            onNavigateToMediaPicker = { currentReplyId -> 
+            onNavigateToMediaPicker = { currentReplyId ->
                 navController.navigate(NavRoutes.chatMediaPickerRoute(chatId, currentReplyId))
             }
         )
@@ -61,7 +67,7 @@ fun NavGraphBuilder.chatNavGraph(navController: NavHostController) {
         )
     ) { backStackEntry ->
         val replyId = backStackEntry.arguments?.getString(NavRoutes.REPLY_ID_ARG)
-        
+
         MediaPickerScreen(
             onDismiss = { navController.popBackStack() },
             onMediaSelected = { uris, caption ->

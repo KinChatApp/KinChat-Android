@@ -6,9 +6,14 @@ import com.kinchat.app.data.remote.model.OtpRequestDto
 import com.kinchat.app.data.remote.model.VerifyOtpRequestDto
 import com.kinchat.app.data.source.auth.DeviceTokenDataSource
 import com.kinchat.app.data.source.auth.SupabaseAuthDataSource
+import com.kinchat.app.domain.repository.AppAuthState
 import com.kinchat.app.domain.repository.AuthRepository
 import com.kinchat.app.domain.repository.RequestOtpResult
+import com.onesignal.OneSignal
+import io.github.jan.supabase.gotrue.SessionStatus
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -42,12 +47,7 @@ class AuthRepositoryImpl @Inject constructor(
         }
     }
 
-    override suspend fun verifyOtp(
-        phone: String,
-        email: String?,
-        otp: String,
-        isNewUser: Boolean
-    ): Result<Unit> {
+    override suspend fun verifyOtp(phone: String, email: String?, otp: String, isNewUser: Boolean): Result<Unit> {
         return withContext(Dispatchers.IO) {
             try {
                 val response = authApi.verifyOtp(VerifyOtpRequestDto(phone, email, otp, isNewUser))
@@ -59,12 +59,10 @@ class AuthRepositoryImpl @Inject constructor(
                         refreshToken = body.session.refreshToken
                     )
 
-                    // 🚀 FIX: Persist meId after successful auth
                     val userId = supabaseAuthDataSource.getCurrentUserId()
                     if (userId != null) {
                         authPreferencesManager.setMeId(userId)
                     }
-
                     Result.success(Unit)
                 } else {
                     Result.failure(Exception(body?.error ?: "Invalid OTP"))
@@ -78,14 +76,11 @@ class AuthRepositoryImpl @Inject constructor(
     override suspend fun logout(): Result<Unit> {
         return withContext(Dispatchers.IO) {
             try {
-                // 🚀 FIX (RC2): Removed deviceTokenDataSource.clearDeviceTokens(userId)
-                // Wiping out tokens for all devices is now prevented.
-                
+                // 🚀 OneSignal Identity Logout on Session clear
+                OneSignal.logout()
+
                 supabaseAuthDataSource.signOut()
-
-                // 🚀 FIX: Clear meId on logout to disable notifications for logged out user
                 authPreferencesManager.setMeId("")
-
                 Result.success(Unit)
             } catch (e: Exception) {
                 Result.failure(e)
@@ -97,17 +92,34 @@ class AuthRepositoryImpl @Inject constructor(
         return supabaseAuthDataSource.isUserLoggedIn()
     }
 
+    override suspend fun getCurrentUserId(): String? {
+        return supabaseAuthDataSource.getCurrentUserId()
+    }
+
     override suspend fun updateFcmToken(token: String): Result<Unit> {
         return withContext(Dispatchers.IO) {
             try {
                 supabaseAuthDataSource.getCurrentUserId()?.let { userId ->
-                    // 🚀 FIX (RC2): Removed clearDeviceTokens(userId) to prevent deleting other devices' tokens.
-                    // Now it only saves/upserts the current token.
                     deviceTokenDataSource.saveDeviceToken(userId, token)
                 }
                 Result.success(Unit)
             } catch (e: Exception) {
                 Result.failure(e)
+            }
+        }
+    }
+
+    override fun observeAuthState(): Flow<AppAuthState> {
+        return supabaseAuthDataSource.observeSessionStatus().map { status ->
+            when (status) {
+                is SessionStatus.Authenticated -> {
+                    val user = status.session.user
+                    val currentUserId = user?.id?.replace("-", "")?.trim() ?: ""
+                    val currentUserName = user?.phone ?: user?.email ?: "KinChat User"
+                    AppAuthState.Authenticated(currentUserId, currentUserName)
+                }
+                is SessionStatus.NotAuthenticated -> AppAuthState.Unauthenticated
+                else -> AppAuthState.Unknown
             }
         }
     }

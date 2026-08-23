@@ -30,7 +30,7 @@ data class DashboardUiState(
 class DashboardViewModel @Inject constructor(
     private val dashboardRepository: DashboardRepository,
     private val chatRepository: ChatRepository,
-    private val contactsUseCases: ContactsUseCases // 🚀 FIX: কন্টাক্ট ডেটা ফেচ করার জন্য UseCase ইনজেক্ট করা হলো
+    private val contactsUseCases: ContactsUseCases
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(DashboardUiState())
@@ -42,21 +42,20 @@ class DashboardViewModel @Inject constructor(
 
     private fun loadChats() {
         viewModelScope.launch {
-            // 🚀 FIX: চ্যাট লিস্ট এবং কন্টাক্ট লিস্ট Combine করে ইউজারনেম রিপ্লেস করা
+            // 🚀 Non-blocking Combine: কন্টাক্ট লোড হতে দেরি হলেও যেন চ্যাট লিস্ট আটকে না থাকে
             combine(
                 dashboardRepository.getRecentChats(),
-                contactsUseCases.getContacts()
+                contactsUseCases.getContacts().onStart { emit(emptyList()) }
             ) { chatList, contacts ->
                 chatList.map { chat ->
                     val contactName = contacts.find { it.registeredUserId == chat.partnerId }?.contactName
                     if (contactName != null) {
-                        chat.copy(name = contactName) // কন্টাক্ট নেম পেলে সেটা রিপ্লেস করবে
+                        chat.copy(name = contactName)
                     } else {
-                        chat // না পেলে আগেরটাই (username) থাকবে
+                        chat
                     }
                 }.sortedByDescending { it.isPinned }
             }
-            .onStart { _uiState.update { it.copy(isLoading = true) } }
             .catch { e -> _uiState.update { it.copy(isLoading = false, error = e.message) } }
             .collect { finalChats ->
                 _uiState.update {

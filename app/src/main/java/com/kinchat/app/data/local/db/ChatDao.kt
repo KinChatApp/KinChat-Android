@@ -6,20 +6,19 @@ import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.RewriteQueriesToDropUnusedColumns
 import androidx.room.Transaction
-import kotlinx.coroutines.flow.Flow
-
-@Dao
+import kotlinx.coroutines.flow.Flow                                                                  
+@Dao                                                                                                 
 interface ChatDao {
 
     @RewriteQueriesToDropUnusedColumns
     @Transaction
     @Query("""
-        SELECT chats.* FROM chats
+        SELECT chats.* FROM chats                                                                            
         INNER JOIN chat_participants ON chats.id = chat_participants.chatId
         WHERE chat_participants.userId = :currentUserId AND chat_participants.isHidden = 0
         ORDER BY chat_participants.isPinned DESC, chats.lastMessageTime DESC
     """)
-    fun observeAllChatsFlow(currentUserId: String): Flow<List<ChatPreview>> // 🚀 FIXED: SELECT chats.* ব্যবহার করা হয়েছে
+    fun observeAllChatsFlow(currentUserId: String): Flow<List<ChatPreview>> 
 
     @Transaction
     @Query("SELECT * FROM chats WHERE id = :chatId")
@@ -37,14 +36,25 @@ interface ChatDao {
     @Query("UPDATE chats SET lastMessageId = :messageId, lastMessageTime = :time WHERE id = :chatId")
     suspend fun updateLastMessageInfo(chatId: String, messageId: String, time: Long)
 
-    // --- Add these two new methods ---
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertChatIfNotExists(chat: ChatEntity)
 
     @Query("""
-        INSERT OR IGNORE INTO chat_participants 
-        (chatId, userId, role, joinedAt, unreadCount, isPinned, isMuted, isArchived, isHidden, isLocked) 
+        INSERT OR IGNORE INTO chat_participants
+        (chatId, userId, role, joinedAt, unreadCount, isPinned, isMuted, isArchived, isHidden, isLocked)
         VALUES (:chatId, :userId, 'member', :time, 0, 0, 0, 0, 0, 0)
     """)
     suspend fun insertLocalParticipant(chatId: String, userId: String, time: Long)
+    
+    // 🚀 NEW FIX: এই ইউজারের সাথে আগে থেকে কোনো চ্যাট আইডি আছে কিনা তা খোঁজার জন্য
+    @Query("""
+        SELECT c.id FROM chats c
+        INNER JOIN chat_participants cp1 ON c.id = cp1.chatId
+        INNER JOIN chat_participants cp2 ON c.id = cp2.chatId
+        WHERE c.isGroup = 0 
+          AND cp1.userId = :currentUserId 
+          AND cp2.userId = :partnerUserId
+        LIMIT 1
+    """)
+    suspend fun getDirectChatId(currentUserId: String, partnerUserId: String): String?
 }

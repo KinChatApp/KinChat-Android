@@ -9,7 +9,7 @@ class PendingOperationDispatcher @Inject constructor(
     private val reactionHandler: ReactionOperationHandler,
     private val participantHandler: ParticipantOperationHandler,
     private val authHandler: AuthOperationHandler,
-    private val attachmentHandler: AttachmentOperationHandler // 🚀 Added handler
+    private val attachmentHandler: AttachmentOperationHandler
 ) {
     suspend fun dispatch(op: PendingOperationEntity) {
         when (op.type) {
@@ -24,11 +24,14 @@ class PendingOperationDispatcher @Inject constructor(
             OperationType.UPDATE_CHAT_MUTE,
             OperationType.UPDATE_CHAT_ARCHIVE,
             OperationType.UPDATE_CHAT_HIDDEN,
-            OperationType.UPDATE_LAST_READ -> participantHandler.handle(op)
+            OperationType.UPDATE_LAST_READ,
+            OperationType.CREATE_CHAT,           // 🚀 FIX: چ্যাট ক্রিয়েট অপারেশন যোগ করা হলো
+            OperationType.UPDATE_CHAT_FAVORITE,  // 🚀 FIX: মিসিং অপারেশন যোগ করা হলো
+            OperationType.UPDATE_CHAT_BLOCK,     // 🚀 FIX: মিসিং অপারেশন যোগ করা হলো
+            OperationType.REPORT_MESSAGE -> participantHandler.handle(op)
 
             OperationType.UPDATE_FCM_TOKEN -> authHandler.handle(op)
 
-            // 🚀 UPLOAD_ATTACHMENT ঠিকমত রাউট করা হলো
             OperationType.UPLOAD_ATTACHMENT -> attachmentHandler.handle(op)
 
             else -> {

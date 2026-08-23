@@ -6,6 +6,7 @@ import com.kinchat.app.data.repository.chat.sync.mapper.ChatSyncMapper
 import com.kinchat.app.data.repository.chat.sync.utils.SyncRetryHelper.retryWithBackoff
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.postgrest.postgrest
+import io.github.jan.supabase.postgrest.query.Order
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -24,7 +25,7 @@ class MissedMessageFetcher @Inject constructor(
                     val lastSyncEpoch = chatMessageDao.getLastMessageTimestamp(chatId) ?: 0L
                     val lastEditEpoch = chatMessageDao.getLastUpdatedTimestamp(chatId) ?: 0L
                     val targetEpoch = maxOf(lastSyncEpoch, lastEditEpoch)
-                    
+
                     val isInitialSync = targetEpoch == 0L
 
                     var offset = 0L
@@ -38,10 +39,11 @@ class MissedMessageFetcher @Inject constructor(
                                     eq(COLUMN_CHAT_ID, chatId)
                                     if (!isInitialSync) {
                                         val lastSyncIso = Instant.ofEpochMilli(targetEpoch).toString()
-                                        // 🚀 BUG FIX: Reverted to standard 'gt' to avoid SDK 'or' compatibility issues
                                         gt("created_at", lastSyncIso)
                                     }
                                 }
+                                // 🚀 BUG FIX: Added Explicit Order to fetch latest messages first
+                                order("created_at", Order.DESCENDING)
                                 range(offset, offset + limit - 1)
                             }
                             .decodeList<JsonObject>()
@@ -53,7 +55,7 @@ class MissedMessageFetcher @Inject constructor(
 
                             if (entities.isNotEmpty()) {
                                 entities.forEach { entity ->
-                                    chatMessageDao.upsertMessageMerged(entity) 
+                                    chatMessageDao.upsertMessageMerged(entity)
                                 }
                             }
 

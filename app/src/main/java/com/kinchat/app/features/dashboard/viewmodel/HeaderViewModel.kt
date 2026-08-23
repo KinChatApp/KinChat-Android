@@ -32,9 +32,17 @@ class HeaderViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
             val userId = repository.getCurrentUserId()
+            
             if (userId != null) {
-                val profile = repository.getUserProfile(userId)
-                _uiState.update { it.copy(isLoading = false, avatarUrl = profile?.avatarUrl) }
+                // 🚀 FIX V5: Flow observe করা হচ্ছে
+                repository.observeUserProfile(userId).collect { profile ->
+                    _uiState.update { 
+                        it.copy(
+                            isLoading = false, 
+                            avatarUrl = profile?.avatarUrl
+                        ) 
+                    }
+                }
             } else {
                 _uiState.update { it.copy(isLoading = false) }
             }

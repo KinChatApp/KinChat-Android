@@ -26,7 +26,7 @@ import com.kinchat.app.features.dashboard.viewmodel.DashboardViewModel
 
 @Composable
 fun DashboardScreen(
-    onNavigateToChat: (String) -> Unit,
+    onNavigateToChat: (String, String) -> Unit, // 🚀 আপডেট করা হয়েছে
     onNavigateToSearch: () -> Unit,
     onNavigateToProfile: () -> Unit,
     onNavigateToSaved: () -> Unit,
@@ -37,9 +37,6 @@ fun DashboardScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
-    // Transient UI (context menu / delete dialog) lives in the ViewModel, which
-    // survives tab switches (state is saved/restored). Clear it whenever the
-    // dashboard leaves composition so it cannot reappear unexpectedly on return.
     DisposableEffect(Unit) {
         onDispose { viewModel.clearTransientUiState() }
     }
@@ -72,12 +69,11 @@ fun DashboardScreen(
             ChatListSection(
                 isLoading = uiState.isLoading,
                 chats = uiState.chats,
-                onChatClick = onNavigateToChat,
+                onChatClick = onNavigateToChat, // 🚀 এখন ID এবং Name দুটোই পাস হবে
                 onChatLongPress = viewModel::openContextMenu
             )
         }
 
-        // সঠিক Context Menu কল করা হচ্ছে
         uiState.selectedChatForMenu?.let { chat ->
             ChatContextMenu(
                 selectedChat = chat,

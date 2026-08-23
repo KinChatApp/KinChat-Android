@@ -39,23 +39,25 @@ class MessageOperationHandler @Inject constructor(
                 chat_id = message.chatId,
                 sender_id = message.senderId,
                 content = message.content,
-                type = message.type.name,
+                type = message.type.name.lowercase(), // 🚀 FIX: Enum to lowercase strictly for Postgres
                 reply_to_id = cleanReplyToId
             )
+            
             DebugLogger.log(context, "PendingWorker", "SEND_MESSAGE attempting insert: $messageDto")
+            
             try {
                 // 1. Insert message to Supabase
                 supabaseClient.postgrest["messages"].insert(messageDto)
                 chatMessageDao.updateMessageStatus(op.referenceId, MessageStatus.SENT)
                 DebugLogger.log(context, "PendingWorker", "SEND_MESSAGE success for ${op.referenceId}")
-                
-                // 🚀 PRO-FIX: Trigger Edge Function ONLY after successful DB insert
+
+                // 2. Trigger Notification
                 try {
                     chatNotificationService.sendNotification(
                         chatId = message.chatId,
                         messageId = message.id,
                         senderId = message.senderId,
-                        content = message.content ?: "", // 🚀 FIX: Handle Nullable String Content
+                        content = message.content ?: "",
                         replyToId = cleanReplyToId
                     )
                 } catch (e: Exception) {
@@ -68,7 +70,8 @@ class MessageOperationHandler @Inject constructor(
                     DebugLogger.log(context, "PendingWorker", "Message already exists. Marking as SENT.")
                     chatMessageDao.updateMessageStatus(op.referenceId, MessageStatus.SENT)
                 } else {
-                    throw insertError
+                    DebugLogger.log(context, "PendingWorker", "SEND_MESSAGE Error: $errMsg")
+                    throw insertError // Retry through WorkManager
                 }
             }
         } else {
