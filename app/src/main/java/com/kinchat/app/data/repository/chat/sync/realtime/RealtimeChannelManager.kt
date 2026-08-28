@@ -47,7 +47,6 @@ class RealtimeChannelManager @Inject constructor(
 
         val job = realtimeScope.launch {
             try {
-                // ১. Messages টেবিলের রিয়েলটাইম লিসেনার
                 val messagesFlow = channel.postgresChangeFlow<PostgresAction>(schema = SCHEMA_PUBLIC) {
                     table = TABLE_MESSAGES
                     filter = "$COLUMN_CHAT_ID=eq.$chatId"
@@ -56,7 +55,6 @@ class RealtimeChannelManager @Inject constructor(
                 launch {
                     try {
                         messagesFlow.collect { action ->
-                            AppLogger.d(TAG, "Realtime action received for $chatId: ${action::class.simpleName}")
                             realtimeMessageHandler.handleAction(action, chatId)
                         }
                     } catch (e: CancellationException) {
@@ -66,7 +64,6 @@ class RealtimeChannelManager @Inject constructor(
                     }
                 }
 
-                // 🚀 FIX: ২. Message Receipts টেবিলের রিয়েলটাইম লিসেনার (Tick Marks এর জন্য)
                 val receiptsFlow = channel.postgresChangeFlow<PostgresAction>(schema = SCHEMA_PUBLIC) {
                     table = TABLE_RECEIPTS
                 }
@@ -74,6 +71,7 @@ class RealtimeChannelManager @Inject constructor(
                 launch {
                     try {
                         receiptsFlow.collect { action ->
+                            // 🚀 DIAGNOSTIC: Definitive test for receipt delivery via socket
                             AppLogger.d(TAG, "📥 RECEIPT EVENT | chatId=$chatId | event=${action::class.simpleName}")
                             realtimeMessageHandler.handleReceiptAction(action)
                         }
@@ -84,7 +82,6 @@ class RealtimeChannelManager @Inject constructor(
                     }
                 }
 
-                // ৩. Connection Status লিসেনার
                 launch {
                     try {
                         channel.status.collect { status ->
@@ -93,7 +90,7 @@ class RealtimeChannelManager @Inject constructor(
                             if (statusStr == "SUBSCRIBED" || statusStr == "JOINED") {
                                 AppLogger.d(TAG, "🔌 RECEIPT CHANNEL SUBSCRIBED | chatId=$chatId")
                                 try {
-                                    AppLogger.d(TAG, "Reconnected! Fetching any missed messages for $chatId...")
+                                    AppLogger.d(TAG, "Fetching any missed messages for $chatId...")
                                     missedMessageFetcher.fetchMissedMessages(chatId)
                                 } catch (e: Exception) {
                                     AppLogger.e(TAG, "Failed to fetch missed messages upon reconnect for $chatId", e)

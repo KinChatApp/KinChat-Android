@@ -24,13 +24,12 @@ private data class BlockInsertDto(val blocker_id: String, val blocked_id: String
 @Serializable
 private data class ReportInsertDto(val reporter_id: String, val reported_user_id: String, val message_id: String, val reason: String)
 
-// 🚀 FIX: মেসেজ রিসিট (Seen Tick) ইনসার্ট করার জন্য Data Class
 @Serializable
 private data class ReceiptInsertDto(val message_id: String, val user_id: String, val status: String)
 
 class ParticipantOperationHandler @Inject constructor(
     private val supabaseClient: SupabaseClient,
-    private val chatMessageDao: ChatMessageDao // 🚀 FIX: Local Database থেকে আনরিড মেসেজ খোঁজার জন্য DAO ইমপ্লিমেন্ট করা হলো
+    private val chatMessageDao: ChatMessageDao
 ) {
     suspend fun handle(op: PendingOperationEntity) {
         when (op.type) {
@@ -114,36 +113,38 @@ class ParticipantOperationHandler @Inject constructor(
     private suspend fun handleUpdateLastRead(op: PendingOperationEntity) {
         val currentUserId = supabaseClient.auth.currentUserOrNull()?.id ?: return
         val timestampMillis = op.payloadJson?.toLongOrNull()
-        
+
         if (timestampMillis != null) {
             val isoTime = java.time.Instant.ofEpochMilli(timestampMillis).toString()
             syncParticipantField(op.referenceId, WorkerChatParticipantUpdateDto(last_read_at = isoTime))
         }
 
-        // 🚀 FIX: লোকাল ডাটাবেস থেকে আনরিড মেসেজগুলো খুঁজে বের করে রিমোট message_receipts টেবিলে আপডেট করা হচ্ছে
         val chatId = op.referenceId
         val unreadIds = chatMessageDao.getUnreadMessageIdsFromPartner(chatId, currentUserId, MessageStatus.READ)
+        
+        // 🚀 FIX: Prevent Postgres UUID Cast Error by filtering synthetics just in case
+        val validUnreadIds = unreadIds.filterNot { it.startsWith("msg_") && it.endsWith("_last") }
 
-        if (unreadIds.isNotEmpty()) {
-            // ১. লোকাল ডাটাবেসে মেসেজগুলো READ হিসেবে মার্ক করে দেওয়া
-            chatMessageDao.markMessagesAsReadLocal(unreadIds, MessageStatus.READ)
-
-            // ২. Supabase-এর message_receipts টেবিলে ইনসার্ট করা
-            val receipts = unreadIds.map { msgId ->
+        // 🚀 FIX: Remote FIRST logic
+        if (validUnreadIds.isNotEmpty()) {
+            val receipts = validUnreadIds.map { msgId ->
                 ReceiptInsertDto(
                     message_id = msgId,
                     user_id = currentUserId,
-                    status = "read" // সুপাবেসে এনাম ছোট হাতের অক্ষরে থাকে
+                    status = "read"
                 )
             }
 
             try {
                 supabaseClient.postgrest["message_receipts"].upsert(receipts)
+                chatMessageDao.markMessagesAsReadLocal(validUnreadIds, MessageStatus.READ)
             } catch (e: Exception) {
                 val errorMsg = e.message ?: ""
                 if (!errorMsg.contains("duplicate key value", ignoreCase = true) && !errorMsg.contains("23505")) {
                     throw e
                 }
+                // Duplicate means the remote receipt is effectively synced.
+                chatMessageDao.markMessagesAsReadLocal(validUnreadIds, MessageStatus.READ)
             }
         }
     }

@@ -1,6 +1,7 @@
 package com.kinchat.app.data.repository.chat.sync.fetcher
 
 import android.util.Log
+import com.kinchat.app.core.logging.AppLogger
 import com.kinchat.app.data.local.db.ChatMessageDao
 import com.kinchat.app.data.repository.chat.sync.mapper.ChatSyncMapper
 import com.kinchat.app.data.repository.chat.sync.utils.SyncRetryHelper.retryWithBackoff
@@ -42,7 +43,6 @@ class MissedMessageFetcher @Inject constructor(
                                         gt("created_at", lastSyncIso)
                                     }
                                 }
-                                // 🚀 BUG FIX: Added Explicit Order to fetch latest messages first
                                 order("created_at", Order.DESCENDING)
                                 range(offset, offset + limit - 1)
                             }
@@ -54,9 +54,8 @@ class MissedMessageFetcher @Inject constructor(
                             }
 
                             if (entities.isNotEmpty()) {
-                                entities.forEach { entity ->
-                                    chatMessageDao.upsertMessageMerged(entity)
-                                }
+                                // 🚀 FIX: Batch process items into a single Room Transaction
+                                chatMessageDao.upsertMessagesMerged(entities)
                             }
 
                             if (rawJsonArray.size < limit.toInt()) {
@@ -72,7 +71,7 @@ class MissedMessageFetcher @Inject constructor(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                Log.e(TAG, "Delta Sync Error for chat $chatId", e)
+                AppLogger.e(TAG, "Delta Sync Error for chat $chatId", e)
                 throw e
             }
         }

@@ -23,9 +23,7 @@ class RealtimeMessageHandler @Inject constructor(
         }
     }
 
-    // 🚀 FIX: Receipts ইভেন্ট হ্যান্ডেল করার নতুন ফাংশন
     suspend fun handleReceiptAction(action: PostgresAction) {
-        AppLogger.d("RealtimeMessageHandler", "📨 handleReceiptAction() | action=${action::class.simpleName}")
         try {
             when (action) {
                 is PostgresAction.Insert -> processReceipt(action.record)
@@ -41,21 +39,19 @@ class RealtimeMessageHandler @Inject constructor(
         val messageId = record["message_id"]?.jsonPrimitive?.content ?: return
         val statusStr = record["status"]?.jsonPrimitive?.content?.uppercase() ?: return
 
-        AppLogger.d("RealtimeMessageHandler", "🔄 processReceipt() | messageId=$messageId | status=$statusStr")
-
         val newStatus = when (statusStr) {
-            "READ" -> {
-                AppLogger.d("RealtimeMessageHandler", "👁️ READ RECEIPT PARSED | messageId=$messageId")
-                MessageStatus.READ
-            }
+            "READ" -> MessageStatus.READ
             "DELIVERED" -> MessageStatus.DELIVERED
             else -> null
         }
 
         if (newStatus != null) {
-            AppLogger.d("RealtimeMessageHandler", "💾 Updating Room status | messageId=$messageId | status=$newStatus")
             val affectedRows = chatMessageDao.updateMessageStatus(messageId, newStatus)
-            AppLogger.d("RealtimeMessageHandler", "✅ Room UPDATE RESULT | messageId=$messageId | status=$newStatus | affectedRows=$affectedRows")
+            if (affectedRows > 0) {
+                AppLogger.d("RealtimeMessageHandler", "✅ Room UPDATE RESULT | messageId=$messageId | status=$newStatus | affectedRows=$affectedRows")
+            } else {
+                AppLogger.d("RealtimeMessageHandler", "⏭️ No-op: Status already up-to-date | messageId=$messageId | status=$newStatus")
+            }
         }
     }
 
