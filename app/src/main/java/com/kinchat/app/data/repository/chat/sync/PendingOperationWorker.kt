@@ -25,7 +25,31 @@ class PendingOperationWorker @AssistedInject constructor(
 
     override suspend fun doWork(): Result {
         val rawOps = pendingOperationDao.getAllPendingOperations()
+
+        if (rawOps.isEmpty()) {
+            return Result.success()
+        }
+
+        // Wait for Supabase Auth storage/refresh to finish.
+        supabaseClient.auth.awaitInitialization()
+
         val currentUserId = supabaseClient.auth.currentUserOrNull()?.id
+
+        DebugLogger.log(
+            applicationContext,
+            "PendingWorker",
+            "doWork triggered, pendingOps=${rawOps.size}, currentUserId=$currentUserId"
+        )
+
+        if (currentUserId == null) {
+            DebugLogger.log(
+                applicationContext,
+                "PendingWorker",
+                "⏭️ Authenticated session unavailable; keeping pending operations untouched."
+            )
+            // 🚀 FIX: Worker semantics-এর জন্য success এর বদলে retry করা হলো
+            return Result.retry()
+        }
 
         // 🚀 FIX: CREATE_CHAT যেন SEND_MESSAGE এর আগে এক্সিকিউট হয় সেজন্য সর্টিং করা হলো
         val pendingOps = rawOps.sortedWith(
@@ -37,14 +61,6 @@ class PendingOperationWorker @AssistedInject constructor(
                 }
             }.thenBy { it.createdAt }
         )
-
-        DebugLogger.log(
-            applicationContext,
-            "PendingWorker",
-            "doWork triggered, pendingOps=${pendingOps.size}, currentUserId=$currentUserId"
-        )
-
-        if (pendingOps.isEmpty()) return Result.success()
 
         var hasRecoverableFailure = false
         val failedReferenceIds = mutableSetOf<String>()

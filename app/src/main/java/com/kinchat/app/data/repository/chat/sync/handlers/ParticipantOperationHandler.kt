@@ -47,7 +47,9 @@ class ParticipantOperationHandler @Inject constructor(
     }
 
     private suspend fun handleCreateChat(op: PendingOperationEntity) {
-        val currentUserId = supabaseClient.auth.currentUserOrNull()?.id ?: return
+        val currentUserId = supabaseClient.auth.currentUserOrNull()?.id
+            ?: throw IllegalStateException("Authentication unavailable for CREATE_CHAT")
+
         val payload = JSONObject(op.payloadJson ?: "{}")
         val partnerId = payload.optString("partner_id")
 
@@ -79,7 +81,9 @@ class ParticipantOperationHandler @Inject constructor(
     }
 
     private suspend fun handleUpdateBlock(op: PendingOperationEntity) {
-        val currentUserId = supabaseClient.auth.currentUserOrNull()?.id ?: return
+        val currentUserId = supabaseClient.auth.currentUserOrNull()?.id
+            ?: throw IllegalStateException("Authentication unavailable for UPDATE_BLOCK")
+
         val isBlocked = op.payloadJson?.toBoolean() ?: false
 
         if (isBlocked) {
@@ -97,7 +101,9 @@ class ParticipantOperationHandler @Inject constructor(
     }
 
     private suspend fun handleReportMessage(op: PendingOperationEntity) {
-        val currentUserId = supabaseClient.auth.currentUserOrNull()?.id ?: return
+        val currentUserId = supabaseClient.auth.currentUserOrNull()?.id
+            ?: throw IllegalStateException("Authentication unavailable for REPORT_MESSAGE")
+
         val payload = JSONObject(op.payloadJson ?: "{}")
 
         supabaseClient.postgrest["reports"].insert(
@@ -111,21 +117,16 @@ class ParticipantOperationHandler @Inject constructor(
     }
 
     private suspend fun handleUpdateLastRead(op: PendingOperationEntity) {
-        val currentUserId = supabaseClient.auth.currentUserOrNull()?.id ?: return
+        val currentUserId = supabaseClient.auth.currentUserOrNull()?.id
+            ?: throw IllegalStateException("Authentication unavailable for UPDATE_LAST_READ")
+
         val timestampMillis = op.payloadJson?.toLongOrNull()
-
-        if (timestampMillis != null) {
-            val isoTime = java.time.Instant.ofEpochMilli(timestampMillis).toString()
-            syncParticipantField(op.referenceId, WorkerChatParticipantUpdateDto(last_read_at = isoTime))
-        }
-
         val chatId = op.referenceId
+
         val unreadIds = chatMessageDao.getUnreadMessageIdsFromPartner(chatId, currentUserId, MessageStatus.READ)
-        
-        // 🚀 FIX: Prevent Postgres UUID Cast Error by filtering synthetics just in case
         val validUnreadIds = unreadIds.filterNot { it.startsWith("msg_") && it.endsWith("_last") }
 
-        // 🚀 FIX: Remote FIRST logic
+        // 🚀 FIX: Reordered Execution (Receipt First, Local READ next, last_read_at Last)
         if (validUnreadIds.isNotEmpty()) {
             val receipts = validUnreadIds.map { msgId ->
                 ReceiptInsertDto(
@@ -136,7 +137,9 @@ class ParticipantOperationHandler @Inject constructor(
             }
 
             try {
+                // 1. Remote message_receipts UPSERT
                 supabaseClient.postgrest["message_receipts"].upsert(receipts)
+                // 2. Local messages -> READ
                 chatMessageDao.markMessagesAsReadLocal(validUnreadIds, MessageStatus.READ)
             } catch (e: Exception) {
                 val errorMsg = e.message ?: ""
@@ -147,16 +150,22 @@ class ParticipantOperationHandler @Inject constructor(
                 chatMessageDao.markMessagesAsReadLocal(validUnreadIds, MessageStatus.READ)
             }
         }
+
+        // 🚀 3. chat_participants.last_read_at update (Runs after receipt upsert)
+        if (timestampMillis != null) {
+            val isoTime = java.time.Instant.ofEpochMilli(timestampMillis).toString()
+            syncParticipantField(chatId, WorkerChatParticipantUpdateDto(last_read_at = isoTime))
+        }
     }
 
     private suspend fun syncParticipantField(chatId: String, updateDto: WorkerChatParticipantUpdateDto) {
         val userId = supabaseClient.auth.currentUserOrNull()?.id
-        if (userId != null) {
-            supabaseClient.postgrest["chat_participants"].update(updateDto) {
-                filter {
-                    eq("chat_id", chatId)
-                    eq("user_id", userId)
-                }
+            ?: throw IllegalStateException("Authentication unavailable for syncParticipantField")
+
+        supabaseClient.postgrest["chat_participants"].update(updateDto) {
+            filter {
+                eq("chat_id", chatId)
+                eq("user_id", userId)
             }
         }
     }

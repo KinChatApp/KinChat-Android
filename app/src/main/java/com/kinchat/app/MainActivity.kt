@@ -25,6 +25,7 @@ import com.kinchat.app.core.ui.MainLayout
 import com.kinchat.app.core.ui.components.BatteryOptimizationDialog
 import com.kinchat.app.core.ui.components.NotificationPermissionEffect
 import com.kinchat.app.core.utils.BatteryOptimizationHelper
+import com.kinchat.app.data.repository.chat.sync.PendingSyncCoordinator
 import com.kinchat.app.domain.model.UserSettings
 import com.kinchat.app.domain.repository.AppAuthState
 import com.kinchat.app.domain.repository.AuthRepository
@@ -46,6 +47,9 @@ class MainActivity : ComponentActivity() {
 
     @Inject
     lateinit var settingsRepository: SettingsRepository
+    
+    @Inject
+    lateinit var pendingSyncCoordinator: PendingSyncCoordinator
 
     private val pendingChatId = MutableStateFlow<String?>(null)
 
@@ -186,6 +190,8 @@ class MainActivity : ComponentActivity() {
                                 .putString("userId", userId)
                                 .putString("userName", state.userName)
                                 .apply()
+
+                            pendingSyncCoordinator.triggerSync()
 
                             if (zegoInitializedForUserId == userId) {
                                 return@collect

@@ -3,6 +3,7 @@ package com.kinchat.app.data.repository.chat.sync.realtime
 import com.kinchat.app.core.logging.AppLogger
 import com.kinchat.app.data.repository.chat.sync.fetcher.MissedMessageFetcher
 import io.github.jan.supabase.SupabaseClient
+import io.github.jan.supabase.gotrue.auth
 import io.github.jan.supabase.realtime.PostgresAction
 import io.github.jan.supabase.realtime.RealtimeChannel
 import io.github.jan.supabase.realtime.channel
@@ -105,6 +106,18 @@ class RealtimeChannelManager @Inject constructor(
                 }
 
                 try {
+                    supabaseClient.auth.awaitInitialization()
+
+                    if (supabaseClient.auth.currentSessionOrNull() == null) {
+                        AppLogger.e(
+                            TAG,
+                            "❌ Cannot subscribe Realtime: authenticated session unavailable for $chatId"
+                        )
+                        stopRealtimeListener(chatId)
+                        return@launch
+                    }
+
+                    AppLogger.d(TAG, "✅ Auth ready. Starting Realtime subscription for $chatId")
                     channel.subscribe()
                     AppLogger.d(TAG, "Successfully subscribed to channel: $chatId")
                 } catch (e: Exception) {

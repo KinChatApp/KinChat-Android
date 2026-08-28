@@ -123,6 +123,12 @@ interface ChatMessageDao {
     """)
     suspend fun getUnreadMessageIdsFromPartner(chatId: String, currentUserId: String, readStatus: MessageStatus): List<String>
 
-    @Query("UPDATE messages SET status = :status WHERE id IN (:messageIds)")
-    suspend fun markMessagesAsReadLocal(messageIds: List<String>, status: MessageStatus)
+    // 🚀 FIX: Prevent unnecessary Flow invalidation for batch READ updates
+    @Query("""
+        UPDATE messages 
+        SET status = :status 
+        WHERE id IN (:messageIds) 
+        AND status != :status
+    """)
+    suspend fun markMessagesAsReadLocal(messageIds: List<String>, status: MessageStatus): Int
 }

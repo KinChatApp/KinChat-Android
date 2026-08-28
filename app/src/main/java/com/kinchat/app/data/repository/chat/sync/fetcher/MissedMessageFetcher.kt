@@ -6,6 +6,7 @@ import com.kinchat.app.data.local.db.ChatMessageDao
 import com.kinchat.app.data.repository.chat.sync.mapper.ChatSyncMapper
 import com.kinchat.app.data.repository.chat.sync.utils.SyncRetryHelper.retryWithBackoff
 import io.github.jan.supabase.SupabaseClient
+import io.github.jan.supabase.gotrue.auth
 import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.postgrest.query.Order
 import kotlinx.coroutines.CancellationException
@@ -22,6 +23,16 @@ class MissedMessageFetcher @Inject constructor(
     suspend fun fetchMissedMessages(chatId: String) {
         withContext(Dispatchers.IO) {
             try {
+                supabaseClient.auth.awaitInitialization()
+
+                if (supabaseClient.auth.currentSessionOrNull() == null) {
+                    AppLogger.d(
+                        TAG,
+                        "⏭️ Skipping missed-message fetch: no authenticated session"
+                    )
+                    return@withContext
+                }
+
                 retryWithBackoff {
                     val lastSyncEpoch = chatMessageDao.getLastMessageTimestamp(chatId) ?: 0L
                     val lastEditEpoch = chatMessageDao.getLastUpdatedTimestamp(chatId) ?: 0L

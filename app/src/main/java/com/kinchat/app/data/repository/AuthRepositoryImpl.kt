@@ -1,5 +1,6 @@
 package com.kinchat.app.data.repository
 
+import com.kinchat.app.core.logging.AppLogger
 import com.kinchat.app.data.local.datastore.AuthPreferencesManager
 import com.kinchat.app.data.remote.api.AuthApi
 import com.kinchat.app.data.remote.model.OtpRequestDto
@@ -76,9 +77,7 @@ class AuthRepositoryImpl @Inject constructor(
     override suspend fun logout(): Result<Unit> {
         return withContext(Dispatchers.IO) {
             try {
-                // 🚀 OneSignal Identity Logout on Session clear
                 OneSignal.logout()
-
                 supabaseAuthDataSource.signOut()
                 authPreferencesManager.setMeId("")
                 Result.success(Unit)
@@ -93,15 +92,31 @@ class AuthRepositoryImpl @Inject constructor(
     }
 
     override suspend fun getCurrentUserId(): String? {
-        return supabaseAuthDataSource.getCurrentUserId()
+        return try {
+            if (!supabaseAuthDataSource.isUserLoggedIn()) {
+                null
+            } else {
+                supabaseAuthDataSource.getCurrentUserId()
+            }
+        } catch (e: Exception) {
+            AppLogger.e(
+                "AuthRepository",
+                "Failed to initialize/read current user",
+                e
+            )
+            null
+        }
     }
 
     override suspend fun updateFcmToken(token: String): Result<Unit> {
         return withContext(Dispatchers.IO) {
             try {
-                supabaseAuthDataSource.getCurrentUserId()?.let { userId ->
-                    deviceTokenDataSource.saveDeviceToken(userId, token)
-                }
+                val userId = getCurrentUserId()
+                    ?: return@withContext Result.failure(
+                        IllegalStateException("Authenticated user unavailable")
+                    )
+
+                deviceTokenDataSource.saveDeviceToken(userId, token)
                 Result.success(Unit)
             } catch (e: Exception) {
                 Result.failure(e)
