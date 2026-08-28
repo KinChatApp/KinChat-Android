@@ -83,8 +83,9 @@ interface ChatMessageDao {
     @Query("UPDATE messages SET content = :content, status = :status, isDeletedForMe = :isDeletedForMe, editedAt = :editedAt, deletedAt = :deletedAt WHERE id = :id")
     suspend fun updateMessageMerged(id: String, content: String?, status: MessageStatus, isDeletedForMe: Boolean, editedAt: Long?, deletedAt: Long?)
 
+    // 🚀 FIX: changed to return Int (affected rows)
     @Query("UPDATE messages SET status = :status WHERE id = :messageId")
-    suspend fun updateMessageStatus(messageId: String, status: MessageStatus)
+    suspend fun updateMessageStatus(messageId: String, status: MessageStatus): Int
 
     @Query("UPDATE messages SET content = :newContent, editedAt = :timestamp WHERE id = :messageId")
     suspend fun updateMessageContent(messageId: String, newContent: String, timestamp: Long)

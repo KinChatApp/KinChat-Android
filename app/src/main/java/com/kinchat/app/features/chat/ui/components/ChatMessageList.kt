@@ -26,6 +26,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.kinchat.app.core.logging.AppLogger
 import com.kinchat.app.features.chat.ui.ChatListItem
 import com.kinchat.app.features.chat.ui.actions.MessageAction
 import kotlinx.coroutines.launch
@@ -50,6 +51,11 @@ fun ChatMessageList(
         derivedStateOf {
             listState.firstVisibleItemIndex > 2
         }
+    }
+
+    // 🚀 DIAGNOSTIC LOG
+    LaunchedEffect(chatItems.size) {
+        AppLogger.d("ChatMessageList", "🔄 UI Recomposition | Total items mapped: ${chatItems.size}")
     }
 
     // 🚀 FIX: নতুন মেসেজ এলে অটোমেটিক নিচে (index 0) স্ক্রল করবে (যদি ইউজার নিচে থাকে)

@@ -1,6 +1,7 @@
 package com.kinchat.app.features.chat.ui.mapper
 
 import com.kinchat.app.R
+import com.kinchat.app.core.logging.AppLogger
 import com.kinchat.app.core.utils.DurationFormatter
 import com.kinchat.app.core.utils.FileFormatter
 import com.kinchat.app.domain.model.*
@@ -32,6 +33,13 @@ object MessageUiMapper {
                 entity.content?.contains("You deleted a message") == true ||
                 entity.content?.contains("You deleted this message") == true
 
+        val tickState = determineTickState(entity, currentUserId)
+        
+        // 🚀 DIAGNOSTIC LOG (FIXED: removed invalid entity.status reference)
+        if (isMe) {
+            AppLogger.d("MessageUiMapper", "🎨 UI MAP | messageId=${entity.id} | localStatus=${entity.localStatus} | tick=$tickState")
+        }
+
         return MessageUiModel(
             id = entity.id ?: "",
             content = entity.content ?: "",
@@ -45,7 +53,7 @@ object MessageUiMapper {
                 isDeleted = isDeletedMessage,
                 isForwarded = entity.isForwarded == true,
                 isEdited = entity.editedAt != null,
-                tickState = determineTickState(entity, currentUserId)
+                tickState = tickState
             ),
             senderName = if (isMe) "You" else partnerName,
             media = mapMediaState(entity),
@@ -76,14 +84,12 @@ object MessageUiMapper {
         if (entity.isFailed) return TickState.FAILED
         if (entity.isSending) return TickState.SENDING
 
-        // 🚀 FIX: লোকাল ডাটাবেস থেকে আসা মেসেজ স্ট্যাটাস চেক করা হচ্ছে
         when (entity.localStatus?.uppercase()) {
             "READ" -> return TickState.READ
             "DELIVERED" -> return TickState.DELIVERED
             "SENT" -> return TickState.SENT
         }
-        
-        // ফলব্যাক (যদি নেটওয়ার্ক বা অন্য কোনো সোর্স থেকে আসে)
+
         val otherReceipts = entity.receipts?.filter { it.userId != entity.senderId } ?: emptyList()
         return when {
             otherReceipts.any { it.status == "read" } -> TickState.READ

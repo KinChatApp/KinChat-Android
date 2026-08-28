@@ -13,8 +13,10 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import com.kinchat.app.core.logging.AppLogger
 import com.kinchat.app.domain.model.ChatMessage
 import com.kinchat.app.features.chat.ui.actions.MessageAction
 import com.kinchat.app.features.chat.ui.components.ChatBottomBarSection
@@ -68,6 +70,11 @@ fun ChatScreenContent(
 ) {
     val listState = rememberLazyListState()
     val isSelectionMode = selectedMessages.isNotEmpty()
+
+    // 🚀 DIAGNOSTIC LOG
+    LaunchedEffect(messages) {
+        AppLogger.d("ChatScreenContent", "📱 Screen Recomposition | Raw Messages Count: ${messages.size}")
+    }
 
     // Back must first dismiss/clear any transient UI (selection mode, reaction
     // picker, reply/edit bar, delete sheet, error dialog, header menu). Only

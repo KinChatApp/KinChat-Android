@@ -23,8 +23,6 @@ class MessageObserver @Inject constructor(
     fun observeMessages(chatId: String): Flow<List<ChatMessage>> {
         AppLogger.d("MessageObserver", "Observing local messages for chatId: $chatId")
 
-        // 🚀 SENIOR FIX 4: Realtime লিসেনারের দায়িত্ব ViewModel-কে দেওয়া হয়েছে। 
-        // এখানে শুধুমাত্র অফলাইন/মিসড মেসেজ ফেচ করার ট্রিগার দেওয়া হলো।
         observerScope.launch {
             try {
                 syncManager.fetchMissedMessages(chatId)
@@ -42,8 +40,13 @@ class MessageObserver @Inject constructor(
                     null
                 }
             }
-        }.onEach {
-            AppLogger.d("MessageObserver", "Successfully emitted ${it.size} messages for UI")
+        }.onEach { messages ->
+            AppLogger.d("MessageObserver", "🔄 ROOM FLOW EMISSION | chatId=$chatId | totalMessages=${messages.size}")
+            
+            // 🚀 FIX: changed `status` to `localStatus`
+            messages.takeLast(5).forEach { message ->
+                AppLogger.d("MessageObserver", "💬 MESSAGE STATUS | id=${message.id} | localStatus=${message.localStatus}")
+            }
         }
     }
 }

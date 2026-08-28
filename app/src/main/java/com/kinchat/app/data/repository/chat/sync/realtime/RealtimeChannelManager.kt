@@ -1,6 +1,6 @@
 package com.kinchat.app.data.repository.chat.sync.realtime
 
-import android.util.Log
+import com.kinchat.app.core.logging.AppLogger
 import com.kinchat.app.data.repository.chat.sync.fetcher.MissedMessageFetcher
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.realtime.PostgresAction
@@ -29,7 +29,7 @@ class RealtimeChannelManager @Inject constructor(
     private val channelJobs = ConcurrentHashMap<String, Job>()
 
     private val exceptionHandler = CoroutineExceptionHandler { _, exception ->
-        Log.e(TAG, "Global Realtime Coroutine Error Caught", exception)
+        AppLogger.e(TAG, "Global Realtime Coroutine Error Caught", exception)
     }
 
     private val realtimeScope = CoroutineScope(Dispatchers.IO + SupervisorJob() + exceptionHandler)
@@ -37,11 +37,11 @@ class RealtimeChannelManager @Inject constructor(
     @Suppress("DEPRECATION")
     fun startRealtimeListener(chatId: String) {
         if (activeChannels.containsKey(chatId)) {
-            Log.d(TAG, "Channel for $chatId is already active. Skipping.")
+            AppLogger.d(TAG, "Channel for $chatId is already active. Skipping.")
             return
         }
 
-        Log.d(TAG, "Starting Realtime listener for exactly: $chatId")
+        AppLogger.d(TAG, "Starting Realtime listener for exactly: $chatId")
         val channel = supabaseClient.channel("${CHANNEL_PREFIX}_$chatId")
         activeChannels[chatId] = channel
 
@@ -56,13 +56,13 @@ class RealtimeChannelManager @Inject constructor(
                 launch {
                     try {
                         messagesFlow.collect { action ->
-                            Log.d(TAG, "Realtime action received for $chatId: ${action::class.simpleName}")
+                            AppLogger.d(TAG, "Realtime action received for $chatId: ${action::class.simpleName}")
                             realtimeMessageHandler.handleAction(action, chatId)
                         }
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
-                        Log.e(TAG, "Socket error in messages for $chatId", e)
+                        AppLogger.e(TAG, "Socket error in messages for $chatId", e)
                     }
                 }
 
@@ -74,13 +74,13 @@ class RealtimeChannelManager @Inject constructor(
                 launch {
                     try {
                         receiptsFlow.collect { action ->
-                            Log.d(TAG, "Receipt action received: ${action::class.simpleName}")
+                            AppLogger.d(TAG, "📥 RECEIPT EVENT | chatId=$chatId | event=${action::class.simpleName}")
                             realtimeMessageHandler.handleReceiptAction(action)
                         }
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
-                        Log.e(TAG, "Socket error in receipts for $chatId", e)
+                        AppLogger.e(TAG, "❌ RECEIPT CHANNEL ERROR in receipts for $chatId", e)
                     }
                 }
 
@@ -88,37 +88,38 @@ class RealtimeChannelManager @Inject constructor(
                 launch {
                     try {
                         channel.status.collect { status ->
-                            Log.d(TAG, "Channel status for $chatId is now: $status")
+                            AppLogger.d(TAG, "Channel status for $chatId is now: $status")
                             val statusStr = status.name.uppercase()
                             if (statusStr == "SUBSCRIBED" || statusStr == "JOINED") {
+                                AppLogger.d(TAG, "🔌 RECEIPT CHANNEL SUBSCRIBED | chatId=$chatId")
                                 try {
-                                    Log.d(TAG, "Reconnected! Fetching any missed messages for $chatId...")
+                                    AppLogger.d(TAG, "Reconnected! Fetching any missed messages for $chatId...")
                                     missedMessageFetcher.fetchMissedMessages(chatId)
                                 } catch (e: Exception) {
-                                    Log.e(TAG, "Failed to fetch missed messages upon reconnect for $chatId", e)
+                                    AppLogger.e(TAG, "Failed to fetch missed messages upon reconnect for $chatId", e)
                                 }
                             }
                         }
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
-                        Log.e(TAG, "Status collection error for $chatId", e)
+                        AppLogger.e(TAG, "Status collection error for $chatId", e)
                     }
                 }
 
                 try {
                     channel.subscribe()
-                    Log.d(TAG, "Successfully subscribed to channel: $chatId")
+                    AppLogger.d(TAG, "Successfully subscribed to channel: $chatId")
                 } catch (e: Exception) {
-                    Log.e(TAG, "Failed to subscribe to channel $chatId", e)
+                    AppLogger.e(TAG, "Failed to subscribe to channel $chatId", e)
                     stopRealtimeListener(chatId)
                 }
 
             } catch (e: CancellationException) {
-                Log.d(TAG, "Realtime listener cancelled for $chatId")
+                AppLogger.d(TAG, "Realtime listener cancelled for $chatId")
                 throw e
             } catch (e: Exception) {
-                Log.e(TAG, "Realtime Error for chat $chatId", e)
+                AppLogger.e(TAG, "Realtime Error for chat $chatId", e)
             }
         }
 
@@ -131,11 +132,11 @@ class RealtimeChannelManager @Inject constructor(
             realtimeScope.launch {
                 try {
                     channel.unsubscribe()
-                    Log.d(TAG, "Successfully unsubscribed from channel: $chatId")
+                    AppLogger.d(TAG, "Successfully unsubscribed from channel: $chatId")
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
-                    Log.e(TAG, "Error unsubscribing channel $chatId", e)
+                    AppLogger.e(TAG, "Error unsubscribing channel $chatId", e)
                 }
             }
         }
@@ -154,7 +155,7 @@ class RealtimeChannelManager @Inject constructor(
     companion object {
         private const val TAG = "RealtimeChannelManager"
         private const val TABLE_MESSAGES = "messages"
-        private const val TABLE_RECEIPTS = "message_receipts" // 🚀 FIX: Receipts টেবিলের নাম
+        private const val TABLE_RECEIPTS = "message_receipts"
         private const val SCHEMA_PUBLIC = "public"
         private const val CHANNEL_PREFIX = "chat"
         private const val COLUMN_CHAT_ID = "chat_id"

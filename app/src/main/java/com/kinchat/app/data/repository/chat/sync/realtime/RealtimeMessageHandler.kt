@@ -1,5 +1,6 @@
 package com.kinchat.app.data.repository.chat.sync.realtime
 
+import com.kinchat.app.core.logging.AppLogger
 import com.kinchat.app.data.local.db.ChatMessageDao
 import com.kinchat.app.data.local.db.MessageStatus
 import com.kinchat.app.data.repository.chat.sync.mapper.ChatSyncMapper
@@ -24,10 +25,15 @@ class RealtimeMessageHandler @Inject constructor(
 
     // 🚀 FIX: Receipts ইভেন্ট হ্যান্ডেল করার নতুন ফাংশন
     suspend fun handleReceiptAction(action: PostgresAction) {
-        when (action) {
-            is PostgresAction.Insert -> processReceipt(action.record)
-            is PostgresAction.Update -> processReceipt(action.record)
-            else -> {}
+        AppLogger.d("RealtimeMessageHandler", "📨 handleReceiptAction() | action=${action::class.simpleName}")
+        try {
+            when (action) {
+                is PostgresAction.Insert -> processReceipt(action.record)
+                is PostgresAction.Update -> processReceipt(action.record)
+                else -> {}
+            }
+        } catch (e: Exception) {
+            AppLogger.e("RealtimeMessageHandler", "❌ Failed processing receipt action", e)
         }
     }
 
@@ -35,15 +41,21 @@ class RealtimeMessageHandler @Inject constructor(
         val messageId = record["message_id"]?.jsonPrimitive?.content ?: return
         val statusStr = record["status"]?.jsonPrimitive?.content?.uppercase() ?: return
 
-        // Supabase-এর "delivered" বা "read" স্টেট অনুযায়ী লোকাল ডাটাবেস আপডেট করা
+        AppLogger.d("RealtimeMessageHandler", "🔄 processReceipt() | messageId=$messageId | status=$statusStr")
+
         val newStatus = when (statusStr) {
-            "READ" -> MessageStatus.READ
+            "READ" -> {
+                AppLogger.d("RealtimeMessageHandler", "👁️ READ RECEIPT PARSED | messageId=$messageId")
+                MessageStatus.READ
+            }
             "DELIVERED" -> MessageStatus.DELIVERED
             else -> null
         }
 
         if (newStatus != null) {
-            chatMessageDao.updateMessageStatus(messageId, newStatus)
+            AppLogger.d("RealtimeMessageHandler", "💾 Updating Room status | messageId=$messageId | status=$newStatus")
+            val affectedRows = chatMessageDao.updateMessageStatus(messageId, newStatus)
+            AppLogger.d("RealtimeMessageHandler", "✅ Room UPDATE RESULT | messageId=$messageId | status=$newStatus | affectedRows=$affectedRows")
         }
     }
 
