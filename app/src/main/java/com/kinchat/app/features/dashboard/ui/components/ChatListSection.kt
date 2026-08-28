@@ -22,8 +22,6 @@ fun ChatListSection(
     onChatLongPress: (Chat) -> Unit
 ) {
     Box(modifier = Modifier.fillMaxSize()) {
-        // 🚀 যেহেতু এখন RAM থেকে ডেটা আসবে, তাই বারবার ঢুকলে chats.isEmpty() আর সত্য হবে না।
-        // স্কেলেটন শুধুমাত্র অ্যাপ রিস্টার্ট দেওয়ার পর প্রথমবার ডেটাবেজ লোড হতে যতটুকু সময় লাগে, শুধু তখনই দেখাবে।
         if (isLoading && chats.isEmpty()) {
             Column {
                 repeat(5) { ChatListSkeleton() }

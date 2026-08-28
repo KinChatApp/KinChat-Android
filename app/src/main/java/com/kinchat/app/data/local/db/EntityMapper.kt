@@ -4,6 +4,7 @@ import com.kinchat.app.domain.model.Chat
 import com.kinchat.app.domain.model.ChatMessage
 import com.kinchat.app.domain.model.MessageAttachment
 import com.kinchat.app.domain.model.MessageReaction
+import com.kinchat.app.domain.model.TickState
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import java.time.Instant
@@ -44,18 +45,37 @@ fun MessageWithDetails.toDomainModel(): ChatMessage {
                 imageKitFileId = attachment.imageKitFileId
             )
         },
-        isSending = this.message.status == MessageStatus.PENDING || this.message.status == MessageStatus.SENDING
+        isSending = this.message.status == MessageStatus.PENDING || this.message.status == MessageStatus.SENDING,
+        isFailed = this.message.status == MessageStatus.FAILED,
+        localStatus = this.message.status.name // 🚀 FIX: Room-এর স্ট্যাটাস ম্যাপ করা হলো
     )
 }
 
 fun ChatPreview.toDomainModel(currentUserId: String): Chat {
-    val participantInfo = this.participants.firstOrNull { it.userId == currentUserId }
-    val partnerInfo = this.participants.firstOrNull { it.userId != currentUserId } // 🚀 FIX: অন্য ইউজারের ডেটা বের করা
+    val cleanUserId = currentUserId.replace("\"", "").trim()
+    val participantInfo = this.participants.firstOrNull { it.userId.replace("\"", "").trim() == cleanUserId }
+    val partnerInfo = this.participants.firstOrNull { it.userId.replace("\"", "").trim() != cleanUserId }
+
+    val cleanSenderId = this.lastMessage?.senderId?.replace("\"", "")?.trim()
+    val isLastMsgFromMe = cleanSenderId == cleanUserId
+
+    val mappedTickState = if (isLastMsgFromMe) {
+        when (this.lastMessage?.status) {
+            MessageStatus.PENDING, MessageStatus.SENDING -> TickState.SENDING
+            MessageStatus.SENT -> TickState.SENT
+            MessageStatus.DELIVERED -> TickState.DELIVERED
+            MessageStatus.READ -> TickState.READ
+            MessageStatus.FAILED -> TickState.FAILED
+            else -> TickState.SENT 
+        }
+    } else null
+
+    val isSavedChat = partnerInfo == null || partnerInfo.userId.replace("\"", "").trim() == cleanUserId
 
     return Chat(
         id = this.chat.id,
         name = this.chat.title ?: "Unknown",
-        partnerId = partnerInfo?.userId, // 🚀 FIX: মডেলে পাঠানো
+        partnerId = partnerInfo?.userId,
         lastMessage = this.lastMessage?.content ?: "Attachment",
         timestamp = this.chat.lastMessageTime ?: this.chat.updatedAt,
         unreadCount = participantInfo?.unreadCount ?: 0,
@@ -64,6 +84,9 @@ fun ChatPreview.toDomainModel(currentUserId: String): Chat {
         isFavorite = false,
         isArchived = participantInfo?.isArchived ?: false,
         isMuted = participantInfo?.isMuted ?: false,
-        isBlocked = false
+        isBlocked = false,
+        isLastMessageFromMe = isLastMsgFromMe,
+        tickState = mappedTickState,
+        isSaved = isSavedChat
     )
 }

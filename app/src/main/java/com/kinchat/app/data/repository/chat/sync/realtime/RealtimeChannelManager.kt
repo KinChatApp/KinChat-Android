@@ -47,12 +47,12 @@ class RealtimeChannelManager @Inject constructor(
 
         val job = realtimeScope.launch {
             try {
+                // ১. Messages টেবিলের রিয়েলটাইম লিসেনার
                 val messagesFlow = channel.postgresChangeFlow<PostgresAction>(schema = SCHEMA_PUBLIC) {
                     table = TABLE_MESSAGES
                     filter = "$COLUMN_CHAT_ID=eq.$chatId"
                 }
 
-                // 🚀 FIX: চাইল্ড Coroutine-এর ভেতর try-catch দেওয়া হলো যেন নেটওয়ার্ক ফেইল করলে প্যারেন্ট ক্র্যাশ না করে
                 launch {
                     try {
                         messagesFlow.collect { action ->
@@ -62,11 +62,29 @@ class RealtimeChannelManager @Inject constructor(
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
-                        Log.e(TAG, "Socket or Flow error in messages for $chatId", e)
+                        Log.e(TAG, "Socket error in messages for $chatId", e)
                     }
                 }
 
-                // 🚀 FIX: Status ফ্লো-তেও সেইম try-catch লজিক
+                // 🚀 FIX: ২. Message Receipts টেবিলের রিয়েলটাইম লিসেনার (Tick Marks এর জন্য)
+                val receiptsFlow = channel.postgresChangeFlow<PostgresAction>(schema = SCHEMA_PUBLIC) {
+                    table = TABLE_RECEIPTS
+                }
+
+                launch {
+                    try {
+                        receiptsFlow.collect { action ->
+                            Log.d(TAG, "Receipt action received: ${action::class.simpleName}")
+                            realtimeMessageHandler.handleReceiptAction(action)
+                        }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Socket error in receipts for $chatId", e)
+                    }
+                }
+
+                // ৩. Connection Status লিসেনার
                 launch {
                     try {
                         channel.status.collect { status ->
@@ -136,6 +154,7 @@ class RealtimeChannelManager @Inject constructor(
     companion object {
         private const val TAG = "RealtimeChannelManager"
         private const val TABLE_MESSAGES = "messages"
+        private const val TABLE_RECEIPTS = "message_receipts" // 🚀 FIX: Receipts টেবিলের নাম
         private const val SCHEMA_PUBLIC = "public"
         private const val CHANNEL_PREFIX = "chat"
         private const val COLUMN_CHAT_ID = "chat_id"

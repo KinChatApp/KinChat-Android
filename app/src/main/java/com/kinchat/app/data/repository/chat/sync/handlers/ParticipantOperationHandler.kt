@@ -1,5 +1,7 @@
 package com.kinchat.app.data.repository.chat.sync.handlers
 
+import com.kinchat.app.data.local.db.ChatMessageDao
+import com.kinchat.app.data.local.db.MessageStatus
 import com.kinchat.app.data.local.db.OperationType
 import com.kinchat.app.data.local.db.PendingOperationEntity
 import com.kinchat.app.data.repository.chat.sync.models.WorkerChatParticipantUpdateDto
@@ -10,7 +12,6 @@ import kotlinx.serialization.Serializable
 import org.json.JSONObject
 import javax.inject.Inject
 
-// 🚀 FIX: Serializer for 'Any' error ফিক্স করার জন্য Data Class তৈরি করা হলো
 @Serializable
 private data class ChatInsertDto(val id: String, val created_by: String, val is_group: Boolean)
 
@@ -23,8 +24,13 @@ private data class BlockInsertDto(val blocker_id: String, val blocked_id: String
 @Serializable
 private data class ReportInsertDto(val reporter_id: String, val reported_user_id: String, val message_id: String, val reason: String)
 
+// 🚀 FIX: মেসেজ রিসিট (Seen Tick) ইনসার্ট করার জন্য Data Class
+@Serializable
+private data class ReceiptInsertDto(val message_id: String, val user_id: String, val status: String)
+
 class ParticipantOperationHandler @Inject constructor(
-    private val supabaseClient: SupabaseClient
+    private val supabaseClient: SupabaseClient,
+    private val chatMessageDao: ChatMessageDao // 🚀 FIX: Local Database থেকে আনরিড মেসেজ খোঁজার জন্য DAO ইমপ্লিমেন্ট করা হলো
 ) {
     suspend fun handle(op: PendingOperationEntity) {
         when (op.type) {
@@ -47,7 +53,6 @@ class ParticipantOperationHandler @Inject constructor(
         val partnerId = payload.optString("partner_id")
 
         if (partnerId.isNotEmpty()) {
-            // 1. Insert into chats table
             try {
                 supabaseClient.postgrest["chats"].insert(
                     ChatInsertDto(id = op.referenceId, created_by = currentUserId, is_group = false)
@@ -59,7 +64,6 @@ class ParticipantOperationHandler @Inject constructor(
                 }
             }
 
-            // 2. Insert into chat_participants table
             try {
                 val participants = listOf(
                     ChatParticipantInsertDto(chat_id = op.referenceId, user_id = currentUserId, role = "member"),
@@ -108,10 +112,39 @@ class ParticipantOperationHandler @Inject constructor(
     }
 
     private suspend fun handleUpdateLastRead(op: PendingOperationEntity) {
+        val currentUserId = supabaseClient.auth.currentUserOrNull()?.id ?: return
         val timestampMillis = op.payloadJson?.toLongOrNull()
+        
         if (timestampMillis != null) {
             val isoTime = java.time.Instant.ofEpochMilli(timestampMillis).toString()
             syncParticipantField(op.referenceId, WorkerChatParticipantUpdateDto(last_read_at = isoTime))
+        }
+
+        // 🚀 FIX: লোকাল ডাটাবেস থেকে আনরিড মেসেজগুলো খুঁজে বের করে রিমোট message_receipts টেবিলে আপডেট করা হচ্ছে
+        val chatId = op.referenceId
+        val unreadIds = chatMessageDao.getUnreadMessageIdsFromPartner(chatId, currentUserId, MessageStatus.READ)
+
+        if (unreadIds.isNotEmpty()) {
+            // ১. লোকাল ডাটাবেসে মেসেজগুলো READ হিসেবে মার্ক করে দেওয়া
+            chatMessageDao.markMessagesAsReadLocal(unreadIds, MessageStatus.READ)
+
+            // ২. Supabase-এর message_receipts টেবিলে ইনসার্ট করা
+            val receipts = unreadIds.map { msgId ->
+                ReceiptInsertDto(
+                    message_id = msgId,
+                    user_id = currentUserId,
+                    status = "read" // সুপাবেসে এনাম ছোট হাতের অক্ষরে থাকে
+                )
+            }
+
+            try {
+                supabaseClient.postgrest["message_receipts"].upsert(receipts)
+            } catch (e: Exception) {
+                val errorMsg = e.message ?: ""
+                if (!errorMsg.contains("duplicate key value", ignoreCase = true) && !errorMsg.contains("23505")) {
+                    throw e
+                }
+            }
         }
     }
 

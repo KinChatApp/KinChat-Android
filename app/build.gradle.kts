@@ -153,7 +153,7 @@ dependencies {
     implementation(platform("com.google.firebase:firebase-bom:32.8.0"))
     implementation("com.google.firebase:firebase-messaging")
     implementation("com.cloudinary:cloudinary-android:2.5.0")
-    implementation("com.github.ZEGOCLOUD:zego_uikit_prebuilt_call_android:+")
+    implementation("im.zego:zego_uikit_prebuilt_call_android:+")
 
     // OneSignal SDK
     implementation("com.onesignal:OneSignal:5.1.8")

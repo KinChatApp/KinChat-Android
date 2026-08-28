@@ -26,9 +26,6 @@ data class ContactSyncResult(
     val errorMessage: String? = null
 )
 
-// বর্তমানে ContactsRepositoryImpl-এ upsert manually buildJsonObject দিয়ে হচ্ছে,
-// এই DTO সরাসরি ব্যবহার হচ্ছে না। তবু ভবিষ্যতে কোথাও data-class সিরিয়ালাইজেশন
-// দিয়ে insert করলে যেন null key মিসিং না হয়, তাই @EncodeDefault(ALWAYS) রাখা হলো।
 @OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class UserContactInsertDto(

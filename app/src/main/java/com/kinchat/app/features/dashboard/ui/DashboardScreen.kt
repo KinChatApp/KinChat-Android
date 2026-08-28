@@ -13,9 +13,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.kinchat.app.features.chat.ui.components.ChatContextMenu
@@ -26,7 +23,7 @@ import com.kinchat.app.features.dashboard.viewmodel.DashboardViewModel
 
 @Composable
 fun DashboardScreen(
-    onNavigateToChat: (String, String) -> Unit, // 🚀 আপডেট করা হয়েছে
+    onNavigateToChat: (String, String) -> Unit,
     onNavigateToSearch: () -> Unit,
     onNavigateToProfile: () -> Unit,
     onNavigateToSaved: () -> Unit,
@@ -40,8 +37,6 @@ fun DashboardScreen(
     DisposableEffect(Unit) {
         onDispose { viewModel.clearTransientUiState() }
     }
-
-    var selectedFilter by remember { mutableStateOf("All") }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -62,14 +57,14 @@ fun DashboardScreen(
                 .background(MaterialTheme.colorScheme.background)
         ) {
             ChatFilterTabs(
-                selectedFilter = selectedFilter,
-                onFilterSelected = { selectedFilter = it }
+                selectedFilter = uiState.selectedFilter, // 🚀 FIX: ViewModel-এর স্টেট ব্যবহার
+                onFilterSelected = { viewModel.setFilter(it) } // 🚀 FIX: ViewModel-কে জানানো
             )
 
             ChatListSection(
                 isLoading = uiState.isLoading,
                 chats = uiState.chats,
-                onChatClick = onNavigateToChat, // 🚀 এখন ID এবং Name দুটোই পাস হবে
+                onChatClick = onNavigateToChat,
                 onChatLongPress = viewModel::openContextMenu
             )
         }

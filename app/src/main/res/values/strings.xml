@@ -4,4 +4,16 @@
 
     <!-- Cloudinary Configuration -->
     <string name="cloudinary_cloud_name">pixpgiyn</string>
+
+    <!-- Contacts Screen -->
+    <string name="title_contacts">Contacts</string>
+    <string name="action_search">Search</string>
+    <string name="action_add">Add</string>
+    <string name="toast_contact_permission_denied">Contact permission denied</string>
+    <string name="section_on_kinchat">ON KINCHAT</string>
+    <string name="section_invite_to_kinchat">INVITE TO KINCHAT</string>
+    <string name="action_new_contact">New\nContact</string>
+    <string name="action_invite_friends">Invite\nFriends</string>
+    <string name="action_new_chat">New\nChat</string>
+    <string name="format_contacts_count">%1$d contacts</string>
 </resources>

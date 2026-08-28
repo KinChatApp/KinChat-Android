@@ -3,10 +3,11 @@ package com.kinchat.app.domain.repository
 import com.kinchat.app.domain.model.Chat
 import com.kinchat.app.domain.model.UserProfile
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.StateFlow
 
 interface DashboardRepository {
     fun observeUserProfile(userId: String): Flow<UserProfile?>
-    fun getRecentChats(): Flow<List<Chat>>
+    fun getRecentChats(): StateFlow<List<Chat>>
     suspend fun deleteChat(chatId: String): Result<Unit>
     suspend fun getCurrentUserId(): String?
     suspend fun updateChatPinStatus(chatId: String, isPinned: Boolean): Result<Unit>

@@ -2,24 +2,27 @@ package com.kinchat.app.features.dashboard.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.kinchat.app.core.logging.AppLogger
 import com.kinchat.app.domain.model.Chat
 import com.kinchat.app.domain.repository.DashboardRepository
 import com.kinchat.app.domain.repository.ChatRepository
 import com.kinchat.app.domain.usecase.ContactsUseCases
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 data class DashboardUiState(
     val isLoading: Boolean = true,
+    val allChats: List<Chat> = emptyList(),
     val chats: List<Chat> = emptyList(),
+    val selectedFilter: String = "All",
     val selectedChatForMenu: Chat? = null,
     val showConfirmDeleteDialog: Boolean = false,
     val pendingDeleteChatId: String? = null,
@@ -40,138 +43,109 @@ class DashboardViewModel @Inject constructor(
         loadChats()
     }
 
+    fun setFilter(filter: String) {
+        _uiState.update { state ->
+            state.copy(
+                selectedFilter = filter,
+                chats = applyFilter(state.allChats, filter)
+            )
+        }
+    }
+
+    private fun applyFilter(chats: List<Chat>, filter: String): List<Chat> {
+        return when (filter) {
+            "Unread" -> chats.filter { it.unreadCount > 0 }
+            "Favourites" -> chats.filter { it.isFavorite }
+            "Saved Messages" -> chats.filter { it.isSaved }
+            else -> chats
+        }
+    }
+
     private fun loadChats() {
-        viewModelScope.launch {
-            // 🚀 Non-blocking Combine: কন্টাক্ট লোড হতে দেরি হলেও যেন চ্যাট লিস্ট আটকে না থাকে
-            combine(
-                dashboardRepository.getRecentChats(),
-                contactsUseCases.getContacts().onStart { emit(emptyList()) }
-            ) { chatList, contacts ->
+        viewModelScope.launch(Dispatchers.Default) {
+            val contactsFlow = contactsUseCases.getContacts()
+                .catch {
+                    AppLogger.e("DashboardViewModel", "Contacts flow error", it)
+                    emit(emptyList())
+                }
+
+            val chatsFlow = dashboardRepository.getRecentChats()
+                .catch { e ->
+                    _uiState.update { it.copy(isLoading = false, error = e.message) }
+                    AppLogger.e("DashboardViewModel", "Chat flow error", e)
+                    emit(emptyList())
+                }
+
+            combine(contactsFlow, chatsFlow) { contacts, chatList ->
+                // 🚀 FIX: কন্টাক্ট আইডির কোটেশন মুছে ফেলা হলো
+                val currentContacts = contacts
+                    .mapNotNull { it.registeredUserId?.replace("\"", "")?.trim()?.let { id -> id to it.contactName } }
+                    .toMap()
+
                 chatList.map { chat ->
-                    val contactName = contacts.find { it.registeredUserId == chat.partnerId }?.contactName
-                    if (contactName != null) {
-                        chat.copy(name = contactName)
-                    } else {
-                        chat
+                    val cleanPartnerId = chat.partnerId?.replace("\"", "")?.trim()
+                    var matchedName = currentContacts[cleanPartnerId]
+                    
+                    // 🚀 FIX: আইডি দিয়ে না পেলে সরাসরি কন্টাক্টের নাম দিয়ে খোঁজার ফলব্যাক লজিক
+                    if (matchedName == null) {
+                        matchedName = contacts.find { it.contactName.equals(chat.name, ignoreCase = true) }?.contactName
                     }
+                    
+                    chat.copy(name = matchedName ?: chat.name)
                 }.sortedByDescending { it.isPinned }
-            }
-            .catch { e -> _uiState.update { it.copy(isLoading = false, error = e.message) } }
-            .collect { finalChats ->
-                _uiState.update {
-                    it.copy(
+            }.collect { finalChats ->
+                _uiState.update { state ->
+                    state.copy(
                         isLoading = false,
-                        chats = finalChats
+                        allChats = finalChats,
+                        chats = applyFilter(finalChats, state.selectedFilter)
                     )
                 }
             }
         }
     }
 
-    fun openContextMenu(chat: Chat) {
-        _uiState.update { it.copy(selectedChatForMenu = chat) }
-    }
-
-    fun closeContextMenu() {
-        _uiState.update { it.copy(selectedChatForMenu = null) }
-    }
-
-    fun clearTransientUiState() {
-        _uiState.update {
-            it.copy(
-                selectedChatForMenu = null,
-                showConfirmDeleteDialog = false,
-                pendingDeleteChatId = null
-            )
-        }
-    }
+    fun openContextMenu(chat: Chat) { _uiState.update { it.copy(selectedChatForMenu = chat) } }
+    fun closeContextMenu() { _uiState.update { it.copy(selectedChatForMenu = null) } }
+    fun clearTransientUiState() { _uiState.update { it.copy(selectedChatForMenu = null, showConfirmDeleteDialog = false, pendingDeleteChatId = null) } }
 
     fun pinChat(chatId: String) {
         viewModelScope.launch {
-            val chat = _uiState.value.chats.find { it.id == chatId } ?: return@launch
-            val newStatus = !chat.isPinned
-
-            _uiState.update { state ->
-                val updatedChats = state.chats.map {
-                    if (it.id == chatId) it.copy(isPinned = newStatus) else it
-                }
-                state.copy(
-                    chats = updatedChats.sortedByDescending { c -> c.isPinned },
-                    selectedChatForMenu = null
-                )
-            }
-            chatRepository.updateChatPinStatus(chatId, newStatus)
+            chatRepository.updateChatPinStatus(chatId, !(_uiState.value.allChats.find { it.id == chatId }?.isPinned ?: false))
+            closeContextMenu()
         }
     }
 
     fun favoriteChat(chatId: String) {
         viewModelScope.launch {
-            val chat = _uiState.value.chats.find { it.id == chatId } ?: return@launch
-            val newStatus = !chat.isFavorite
-
-            _uiState.update { state ->
-                state.copy(
-                    chats = state.chats.map { if (it.id == chatId) it.copy(isFavorite = newStatus) else it },
-                    selectedChatForMenu = null
-                )
-            }
-            chatRepository.updateChatFavoriteStatus(chatId, newStatus)
+            chatRepository.updateChatFavoriteStatus(chatId, !(_uiState.value.allChats.find { it.id == chatId }?.isFavorite ?: false))
+            closeContextMenu()
         }
     }
 
     fun archiveChat(chatId: String) {
         viewModelScope.launch {
-            val chat = _uiState.value.chats.find { it.id == chatId } ?: return@launch
-            val newStatus = !chat.isArchived
-
-            _uiState.update { state ->
-                state.copy(
-                    chats = state.chats.map { if (it.id == chatId) it.copy(isArchived = newStatus) else it },
-                    selectedChatForMenu = null
-                )
-            }
-            chatRepository.updateChatArchiveStatus(chatId, newStatus)
+            chatRepository.updateChatArchiveStatus(chatId, !(_uiState.value.allChats.find { it.id == chatId }?.isArchived ?: false))
+            closeContextMenu()
         }
     }
 
     fun muteChat(chatId: String) {
         viewModelScope.launch {
-            val chat = _uiState.value.chats.find { it.id == chatId } ?: return@launch
-            val newStatus = !chat.isMuted
-
-            _uiState.update { state ->
-                state.copy(
-                    chats = state.chats.map { if (it.id == chatId) it.copy(isMuted = newStatus) else it },
-                    selectedChatForMenu = null
-                )
-            }
-            chatRepository.updateChatMuteStatus(chatId, newStatus)
+            chatRepository.updateChatMuteStatus(chatId, !(_uiState.value.allChats.find { it.id == chatId }?.isMuted ?: false))
+            closeContextMenu()
         }
     }
 
     fun blockChat(chatId: String) {
         viewModelScope.launch {
-            val chat = _uiState.value.chats.find { it.id == chatId } ?: return@launch
-            val newStatus = !chat.isBlocked
-
-            _uiState.update { state ->
-                state.copy(
-                    chats = state.chats.map { if (it.id == chatId) it.copy(isBlocked = newStatus) else it },
-                    selectedChatForMenu = null
-                )
-            }
-            chatRepository.updateChatBlockStatus(chatId, newStatus)
+            chatRepository.updateChatBlockStatus(chatId, !(_uiState.value.allChats.find { it.id == chatId }?.isBlocked ?: false))
+            closeContextMenu()
         }
     }
 
     fun requestDeleteChat(chatId: String) {
-        _uiState.update {
-            it.copy(
-                showConfirmDeleteDialog = true,
-                selectedChatForMenu = null,
-                pendingDeleteChatId = chatId
-            )
-        }
+        _uiState.update { it.copy(showConfirmDeleteDialog = true, selectedChatForMenu = null, pendingDeleteChatId = chatId) }
     }
 
     fun cancelDeleteChat() {
@@ -182,14 +156,7 @@ class DashboardViewModel @Inject constructor(
         val chatId = _uiState.value.pendingDeleteChatId ?: return
         viewModelScope.launch {
             _uiState.update { it.copy(showConfirmDeleteDialog = false, pendingDeleteChatId = null) }
-            val result = chatRepository.deleteChatParticipant(chatId)
-            if (result.isSuccess) {
-                _uiState.update { currentState ->
-                    currentState.copy(chats = currentState.chats.filter { it.id != chatId })
-                }
-            } else {
-                _uiState.update { it.copy(error = "Failed to delete chat") }
-            }
+            chatRepository.deleteChatParticipant(chatId)
         }
     }
 }

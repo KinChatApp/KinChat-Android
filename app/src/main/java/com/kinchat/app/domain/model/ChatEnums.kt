@@ -11,7 +11,7 @@ enum class CallType(val value: String) {
 }
 
 enum class CallStatus(val value: String) {
-    RINGING("ringing"), ANSWERED("answered"), ENDED("ended"), MISSED("missed"), 
+    RINGING("ringing"), ANSWERED("answered"), ENDED("ended"), MISSED("missed"),
     REJECTED("rejected"), CANCELLED("cancelled"), FAILED("failed"), UNKNOWN("unknown");
     companion object { fun from(value: String?) = entries.find { it.value == value } ?: UNKNOWN }
 }
@@ -21,4 +21,5 @@ enum class ReactionType(val value: String) {
     companion object { fun from(value: String?) = entries.find { it.value == value } ?: UNKNOWN }
 }
 
-enum class TickState { SENDING, SENT, DELIVERED, READ }
+// 🚀 আপডেট: অফলাইন ফার্স্ট আর্কিটেকচারের জন্য FAILED স্টেট যুক্ত করা হলো
+enum class TickState { SENDING, SENT, DELIVERED, READ, FAILED }

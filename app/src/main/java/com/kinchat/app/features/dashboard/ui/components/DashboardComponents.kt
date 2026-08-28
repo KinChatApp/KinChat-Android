@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.kinchat.app.core.utils.ChatFormatters
 import com.kinchat.app.domain.model.Chat
+import com.kinchat.app.domain.model.TickState
 import com.valentinilk.shimmer.shimmer
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -87,10 +88,7 @@ private fun ChatContent(chat: Chat, modifier: Modifier = Modifier) {
             hasUnread = chat.unreadCount > 0
         )
         Spacer(modifier = Modifier.height(4.dp))
-        ChatSubtitle(
-            lastMessage = chat.lastMessage,
-            unreadCount = chat.unreadCount
-        )
+        ChatSubtitle(chat = chat)
     }
 }
 
@@ -119,21 +117,44 @@ private fun ChatHeader(name: String, timestamp: Long, hasUnread: Boolean) {
 }
 
 @Composable
-private fun ChatSubtitle(lastMessage: String?, unreadCount: Int) {
+private fun ChatSubtitle(chat: Chat) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(
-            text = lastMessage ?: "No messages yet",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f)
-        )
-        if (unreadCount > 0) {
+        Row(
+            modifier = Modifier.weight(1f),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // 🚀 FIX: FAILED স্টেট হ্যান্ডেল করা হয়েছে
+            if (chat.isLastMessageFromMe && chat.tickState != null) {
+                val (icon, tint) = when (chat.tickState) {
+                    TickState.SENDING -> Icons.Default.Schedule to Color.Gray
+                    TickState.SENT -> Icons.Default.Check to Color.Gray
+                    TickState.DELIVERED -> Icons.Default.DoneAll to Color.Gray
+                    TickState.READ -> Icons.Default.DoneAll to Color(0xFF34B7F1)
+                    TickState.FAILED -> Icons.Default.ErrorOutline to MaterialTheme.colorScheme.error
+                }
+                Icon(
+                    imageVector = icon,
+                    contentDescription = "Message Status",
+                    tint = tint,
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+            }
+
+            Text(
+                text = chat.lastMessage ?: "No messages yet",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+
+        if (chat.unreadCount > 0) {
             Box(
                 modifier = Modifier
                     .padding(start = 8.dp)
@@ -142,7 +163,7 @@ private fun ChatSubtitle(lastMessage: String?, unreadCount: Int) {
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = unreadCount.toString(),
+                    text = chat.unreadCount.toString(),
                     style = MaterialTheme.typography.labelSmall,
                     color = Color.White,
                     fontWeight = FontWeight.Bold
@@ -212,7 +233,7 @@ fun ChatContextMenuBottomSheet(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             HorizontalDivider()
-            
+
             ListItem(
                 headlineContent = { Text("Pin Chat") },
                 leadingContent = { Icon(Icons.Default.PushPin, contentDescription = null) },
@@ -238,9 +259,9 @@ fun ChatContextMenuBottomSheet(
                 leadingContent = { Icon(Icons.Default.Block, contentDescription = null) },
                 modifier = Modifier.clickable { onBlockClick() }
             )
-            
+
             HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-            
+
             ListItem(
                 headlineContent = { Text("Delete Chat", color = MaterialTheme.colorScheme.error) },
                 leadingContent = { Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) },

@@ -21,7 +21,6 @@ class LoadRemoteContactsUseCase @Inject constructor(
     suspend operator fun invoke() = repository.loadContactsFromRemote()
 }
 
-// 🚀 FIX: 'data class' থেকে সাধারণ 'class' করা হয়েছে এবং '@Inject constructor' বসানো হয়েছে।
 class ContactsUseCases @Inject constructor(
     val getContacts: GetContactsUseCase,
     val syncDeviceContacts: SyncDeviceContactsUseCase,

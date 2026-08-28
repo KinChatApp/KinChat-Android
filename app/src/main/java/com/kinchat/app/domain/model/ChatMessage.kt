@@ -21,15 +21,14 @@ data class ChatMessage(
     @SerialName("is_forwarded") val isForwarded: Boolean? = false,
     @SerialName("forwarded_from_id") val forwardedFromId: String? = null,
     @SerialName("reply_to_id") val replyToId: String? = null,
-
-    // 🚀 ফিক্স: Map<String, String> এর বদলে JsonObject ব্যবহার করা হলো
     val metadata: JsonObject? = null,
-
     val messageReactions: List<MessageReaction>? = null,
     val receipts: List<MessageReceipt>? = null,
     val attachments: List<MessageAttachment>? = null,
 
-    @Transient val isSending: Boolean = false
+    @Transient val isSending: Boolean = false,
+    @Transient val isFailed: Boolean = false,
+    @Transient val localStatus: String? = null // 🚀 FIX: লোকাল ডাটাবেস স্ট্যাটাস পাস করার জন্য
 )
 
 @Serializable
@@ -52,12 +51,10 @@ data class MessageReceipt(
 data class MessageAttachment(
     val id: String? = null,
     @SerialName("message_id") val messageId: String? = null,
-    @SerialName("file_url") val fileUrl: String? = null, // Nullable for offline first
+    @SerialName("file_url") val fileUrl: String? = null,
     @SerialName("file_name") val fileName: String? = null,
     @SerialName("file_size") val fileSize: Long? = null,
     @SerialName("file_type") val fileType: String? = null,
-    
-    // Offline-First & ImageKit Support
     @SerialName("local_uri") val localUri: String? = null,
     @SerialName("upload_state") val uploadState: String? = null,
     @SerialName("imagekit_file_id") val imageKitFileId: String? = null

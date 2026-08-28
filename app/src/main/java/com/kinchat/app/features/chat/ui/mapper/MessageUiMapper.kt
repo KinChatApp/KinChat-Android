@@ -26,8 +26,7 @@ object MessageUiMapper {
     ): MessageUiModel {
         val isMe = entity.senderId == currentUserId
         val type = MessageType.from(entity.type ?: "text")
-        
-        // 🚀 FIX: ডাটাবেস ভ্যালু অথবা টেক্সট কন্টেন্ট চেক করে ডিলিট স্ট্যাটাস বের করা হচ্ছে
+
         val isDeletedMessage = entity.deletedAt != null ||
                 entity.content?.contains("This message was deleted") == true ||
                 entity.content?.contains("You deleted a message") == true ||
@@ -43,7 +42,7 @@ object MessageUiMapper {
             isTopInGroup = isTopInGroup,
             showTail = showTail,
             status = MessageStatusUiState(
-                isDeleted = isDeletedMessage, // 🚀 এখানে নতুন ভেরিয়েবল পাস করা হলো
+                isDeleted = isDeletedMessage,
                 isForwarded = entity.isForwarded == true,
                 isEdited = entity.editedAt != null,
                 tickState = determineTickState(entity, currentUserId)
@@ -74,7 +73,17 @@ object MessageUiMapper {
     }
 
     private fun determineTickState(entity: ChatMessage, currentUserId: String): TickState {
+        if (entity.isFailed) return TickState.FAILED
         if (entity.isSending) return TickState.SENDING
+
+        // 🚀 FIX: লোকাল ডাটাবেস থেকে আসা মেসেজ স্ট্যাটাস চেক করা হচ্ছে
+        when (entity.localStatus?.uppercase()) {
+            "READ" -> return TickState.READ
+            "DELIVERED" -> return TickState.DELIVERED
+            "SENT" -> return TickState.SENT
+        }
+        
+        // ফলব্যাক (যদি নেটওয়ার্ক বা অন্য কোনো সোর্স থেকে আসে)
         val otherReceipts = entity.receipts?.filter { it.userId != entity.senderId } ?: emptyList()
         return when {
             otherReceipts.any { it.status == "read" } -> TickState.READ
@@ -86,7 +95,6 @@ object MessageUiMapper {
     private fun mapMediaState(entity: ChatMessage): MediaUiState? {
         val attachment = entity.attachments?.firstOrNull() ?: return null
 
-        // FIX: Handle literal "null" strings as well as empty strings
         val mediaUrl = attachment.fileUrl?.takeIf { it.isNotBlank() && it != "null" }
             ?: attachment.localUri?.takeIf { it.isNotBlank() && it != "null" }
             ?: ""

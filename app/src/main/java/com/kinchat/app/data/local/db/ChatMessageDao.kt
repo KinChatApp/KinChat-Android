@@ -46,7 +46,8 @@ interface ChatMessageDao {
             } else {
                 when (local.status) {
                     MessageStatus.SENT -> {
-                        if (serverMessage.status == MessageStatus.DELIVERED || serverMessage.status == MessageStatus.READ) serverMessage.status else local.status                                                             }
+                        if (serverMessage.status == MessageStatus.DELIVERED || serverMessage.status == MessageStatus.READ) serverMessage.status else local.status
+                    }
                     MessageStatus.DELIVERED -> {
                         if (serverMessage.status == MessageStatus.READ) serverMessage.status else local.status
                     }
@@ -62,7 +63,6 @@ interface ChatMessageDao {
                 null
             }
 
-            // 🚀 FIX: Prevent server from undeleting offline-deleted messages
             val mergedDeletedAt = if (local.deletedAt != null || serverMessage.deletedAt != null) {
                 maxOf(local.deletedAt ?: 0L, serverMessage.deletedAt ?: 0L)
             } else {
@@ -75,7 +75,7 @@ interface ChatMessageDao {
                 status = mergedStatus,
                 isDeletedForMe = mergedDeletedForMe,
                 editedAt = mergedEditedAt,
-                deletedAt = mergedDeletedAt // 👈 এখানে mergedDeletedAt ব্যবহার করা হয়েছে
+                deletedAt = mergedDeletedAt
             )
         }
     }
@@ -97,4 +97,12 @@ interface ChatMessageDao {
 
     @Query("UPDATE messages SET isDeletedForMe = 1, deletedAt = :timestamp WHERE id = :messageId")
     suspend fun softDeleteMessage(messageId: String, timestamp: Long)
+
+    // 🚀 FIX: আনরিড মেসেজগুলো ডাটাবেস থেকে খোঁজার জন্য নতুন মেথড
+    @Query("SELECT id FROM messages WHERE chatId = :chatId AND senderId != :currentUserId AND status != :readStatus")
+    suspend fun getUnreadMessageIdsFromPartner(chatId: String, currentUserId: String, readStatus: MessageStatus): List<String>
+
+    // 🚀 FIX: মেসেজগুলো লোকালি READ হিসেবে আপডেট করার জন্য
+    @Query("UPDATE messages SET status = :status WHERE id IN (:messageIds)")
+    suspend fun markMessagesAsReadLocal(messageIds: List<String>, status: MessageStatus)
 }

@@ -62,7 +62,7 @@ internal object DashboardMapper {
                 )
             )
 
-            // 🚀 FIX: Partner Participant (যাতে লোকাল কন্টাক্ট থেকে আইডি ম্যাচ করানো যায়)
+            // 🚀 FIX: Partner Participant 
             if (!dto.other_user_id.isNullOrBlank() && dto.other_user_id != currentUserId) {
                 participants.add(
                     ChatParticipantEntity(
@@ -87,12 +87,12 @@ internal object DashboardMapper {
                     ChatMessageEntity(
                         id = dummyMsgId,
                         chatId = dto.chat_id,
-                        senderId = DashboardConstants.SENDER_UNKNOWN,
+                        senderId = dto.last_message_sender ?: DashboardConstants.SENDER_UNKNOWN, // 🚀 FIX: আসল সেন্ডার আইডি বসানো হলো
                         content = dto.last_message_content,
                         type = MessageType.text,
                         status = MessageStatus.DELIVERED,
                         createdAt = timestamp,
-                        isDeletedForMe = true
+                        isDeletedForMe = false // 🚀 FIX: dummy মেসেজ হাইড করা ছিল, তা false করা হলো
                     )
                 )
             }

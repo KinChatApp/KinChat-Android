@@ -6,19 +6,21 @@ import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.RewriteQueriesToDropUnusedColumns
 import androidx.room.Transaction
-import kotlinx.coroutines.flow.Flow                                                                  
-@Dao                                                                                                 
+import kotlinx.coroutines.flow.Flow
+
+@Dao
 interface ChatDao {
 
     @RewriteQueriesToDropUnusedColumns
     @Transaction
     @Query("""
-        SELECT chats.* FROM chats                                                                            
+        SELECT chats.* FROM chats
         INNER JOIN chat_participants ON chats.id = chat_participants.chatId
+        LEFT JOIN messages ON chats.lastMessageId = messages.id
         WHERE chat_participants.userId = :currentUserId AND chat_participants.isHidden = 0
         ORDER BY chat_participants.isPinned DESC, chats.lastMessageTime DESC
-    """)
-    fun observeAllChatsFlow(currentUserId: String): Flow<List<ChatPreview>> 
+    """) // 🚀 FIX: LEFT JOIN messages যোগ করা হয়েছে যাতে মেসেজের স্টেট পালটালে রুম রিঅ্যাক্ট করে
+    fun observeAllChatsFlow(currentUserId: String): Flow<List<ChatPreview>>
 
     @Transaction
     @Query("SELECT * FROM chats WHERE id = :chatId")
@@ -45,14 +47,13 @@ interface ChatDao {
         VALUES (:chatId, :userId, 'member', :time, 0, 0, 0, 0, 0, 0)
     """)
     suspend fun insertLocalParticipant(chatId: String, userId: String, time: Long)
-    
-    // 🚀 NEW FIX: এই ইউজারের সাথে আগে থেকে কোনো চ্যাট আইডি আছে কিনা তা খোঁজার জন্য
+
     @Query("""
         SELECT c.id FROM chats c
         INNER JOIN chat_participants cp1 ON c.id = cp1.chatId
         INNER JOIN chat_participants cp2 ON c.id = cp2.chatId
-        WHERE c.isGroup = 0 
-          AND cp1.userId = :currentUserId 
+        WHERE c.isGroup = 0
+          AND cp1.userId = :currentUserId
           AND cp2.userId = :partnerUserId
         LIMIT 1
     """)

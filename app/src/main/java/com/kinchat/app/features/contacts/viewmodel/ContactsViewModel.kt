@@ -44,17 +44,19 @@ class ContactsViewModel @Inject constructor(
                     .filter { it.registeredUserId != null }
                     .associateBy { it.registeredUserId }
                     .values.toList()
-                
-                // 🚀 FIX: যে নাম্বারগুলো ইতিমধ্যে Registered, সেগুলো বের করে নিচ্ছি
+
                 val registeredPhones = uniqueRegistered.map { it.contactPhoneNormalized }.toSet()
-                
-                // 🚀 FIX: Unregistered লিস্ট থেকে Registered নাম্বারগুলো ফিল্টার আউট করে দিচ্ছি
+
                 val unregistered = contacts
                     .filter { it.registeredUserId == null && it.contactPhoneNormalized !in registeredPhones }
                     .associateBy { it.contactPhoneNormalized }
                     .values.toList()
 
-                Pair(uniqueRegistered, unregistered)
+                // 🚀 FIX: অ্যালফাবেটিক্যালি সর্ট করা হচ্ছে (A-Z)
+                val sortedRegistered = uniqueRegistered.sortedBy { it.contactName.trim().lowercase() }
+                val sortedUnregistered = unregistered.sortedBy { it.contactName.trim().lowercase() }
+
+                Pair(sortedRegistered, sortedUnregistered)
             }
             .flowOn(Dispatchers.Default)
             .onEach { (registered, unregistered) ->

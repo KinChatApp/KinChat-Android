@@ -8,6 +8,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.filled.Reply
+import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -16,6 +18,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -83,11 +86,13 @@ fun ColumnScope.BubbleFooter(message: MessageUiModel) {
         Text(text = message.formattedTime, color = timeColor, fontSize = 11.sp)
         if (message.isMe) {
             Spacer(modifier = Modifier.width(4.dp))
+            // 🚀 আপডেট: হোয়াটসঅ্যাপ/টেলিগ্রাম স্টাইল টিক আইকন ও কালার যুক্ত করা হলো
             when (message.status.tickState) {
-                TickState.SENDING -> Text("...", color = timeColor, fontSize = 11.sp)
+                TickState.SENDING -> Icon(Icons.Default.Schedule, contentDescription = null, tint = timeColor, modifier = Modifier.size(13.dp))
                 TickState.SENT -> Icon(Icons.Default.Done, contentDescription = stringResource(R.string.desc_sent), tint = timeColor, modifier = Modifier.size(15.dp))
                 TickState.DELIVERED -> Icon(Icons.Default.DoneAll, contentDescription = stringResource(R.string.desc_delivered), tint = timeColor, modifier = Modifier.size(16.dp))
-                TickState.READ -> Icon(Icons.Default.DoneAll, contentDescription = stringResource(R.string.desc_read), tint = LocalExtendedColors.current.statusRead, modifier = Modifier.size(16.dp))
+                TickState.READ -> Icon(Icons.Default.DoneAll, contentDescription = stringResource(R.string.desc_read), tint = Color(0xFF34B7F1), modifier = Modifier.size(16.dp)) // WhatsApp Blue
+                TickState.FAILED -> Icon(Icons.Default.ErrorOutline, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(14.dp))
             }
         }
     }
