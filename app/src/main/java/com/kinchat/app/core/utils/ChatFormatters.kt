@@ -1,12 +1,56 @@
 package com.kinchat.app.core.utils
 
 import androidx.compose.runtime.Stable
+import com.kinchat.app.domain.model.Chat
+import com.kinchat.app.domain.model.UserContact
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 import java.util.Locale
+
+@Stable
+object ContactResolver {
+    fun resolveDisplayName(
+        contactName: String?,
+        profileName: String?,
+        username: String?,
+        phoneNumber: String?
+    ): String {
+        // ৭. Contact name আসলেই কোনো ফোন নম্বর কিনা তা যাচাই করা
+        val numericContactName = contactName?.replace(Regex("\\D"), "") ?: ""
+        val isContactNameActuallyPhone = numericContactName.length > 7 && phoneNumber?.contains(numericContactName) == true
+
+        return when {
+            !contactName.isNullOrBlank() && !isContactNameActuallyPhone -> contactName
+            !profileName.isNullOrBlank() -> profileName
+            !username.isNullOrBlank() -> "@$username"
+            !phoneNumber.isNullOrBlank() -> phoneNumber
+            else -> "Unknown User"
+        }
+    }
+
+    fun resolveChatName(chat: Chat, contacts: List<UserContact>): String {
+        val cleanPartnerId = chat.partnerId?.replace("\"", "")?.trim()
+        var matchedContact = contacts.find { it.registeredUserId == cleanPartnerId }
+
+        if (matchedContact == null) {
+            matchedContact = contacts.find { it.contactName.equals(chat.name, ignoreCase = true) }
+        }
+
+        val resolvedName = matchedContact?.let {
+            resolveDisplayName(
+                contactName = it.contactName,
+                profileName = it.profileName,
+                username = it.username,
+                phoneNumber = it.contactPhoneNormalized
+            )
+        }
+
+        return if (resolvedName != null && resolvedName != "Unknown User") resolvedName else chat.name
+    }
+}
 
 @Stable
 object ChatFormatters {

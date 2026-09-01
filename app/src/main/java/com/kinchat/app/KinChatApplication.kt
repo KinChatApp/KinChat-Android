@@ -9,7 +9,6 @@ import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
 import com.cloudinary.android.MediaManager
 import com.kinchat.app.core.logging.AppLogger
-import com.kinchat.app.data.repository.chat.sync.PendingSyncCoordinator
 import com.onesignal.OneSignal
 import com.onesignal.debug.LogLevel
 import com.zegocloud.uikit.prebuilt.call.invite.ZegoUIKitPrebuiltCallInvitationConfig
@@ -28,11 +27,10 @@ class KinChatApplication : Application(), Configuration.Provider {
     @Inject
     lateinit var workerFactory: HiltWorkerFactory
 
-    @Inject
-    lateinit var pendingSyncCoordinator: PendingSyncCoordinator
-
     private val ONESIGNAL_APP_ID =
         "c3b6c28c-fdf0-4eb1-be03-e02f2057628d"
+
+    private var deferredServicesInitialized = false
 
     override val workManagerConfiguration: Configuration
         get() = Configuration.Builder()
@@ -45,17 +43,52 @@ class KinChatApplication : Application(), Configuration.Provider {
         instance = this
         AppLogger.init()
 
-        // --- OneSignal Initialization ---
-        OneSignal.Debug.logLevel = LogLevel.VERBOSE
-        OneSignal.initWithContext(this, ONESIGNAL_APP_ID)
-        // --------------------------------
+        /*
+         * IMPORTANT:
+         * Keep Application startup as lightweight as possible.
+         *
+         * The following services are intentionally NOT initialized here:
+         * - OneSignal
+         * - Cloudinary
+         * - Pending sync monitoring
+         * - Initial sync
+         * - Notification channels
+         *
+         * They are initialized later from MainActivity after the first UI
+         * frame has had a chance to render.
+         *
+         * ZegoCloud is also initialized later after authentication.
+         */
+    }
 
-        // Background sync monitoring.
-        // This is independent from Dashboard UI rendering.
-        pendingSyncCoordinator.startMonitoring()
-        pendingSyncCoordinator.triggerSync()
+    /**
+     * Initializes non-critical application services after the initial UI
+     * has started rendering.
+     *
+     * This function is intentionally safe to call more than once.
+     */
+    fun initializeDeferredServices() {
+        if (deferredServicesInitialized) return
+        deferredServicesInitialized = true
 
-        // --- Cloudinary Initialization ---
+        // --- OneSignal ---
+        try {
+            OneSignal.Debug.logLevel = LogLevel.VERBOSE
+            OneSignal.initWithContext(this, ONESIGNAL_APP_ID)
+
+            AppLogger.d(
+                "KinChatStartup",
+                "✅ OneSignal initialized (deferred)"
+            )
+        } catch (e: Exception) {
+            AppLogger.e(
+                "KinChatStartup",
+                "⚠️ OneSignal deferred initialization failed: ${e.message}",
+                e
+            )
+        }
+
+        // --- Cloudinary ---
         try {
             val config = HashMap<String, String>().apply {
                 this["cloud_name"] = getString(R.string.cloudinary_cloud_name)
@@ -65,28 +98,42 @@ class KinChatApplication : Application(), Configuration.Provider {
             MediaManager.init(this, config)
 
             AppLogger.d(
-                "KinChatApp",
-                "✅ Cloudinary initialized successfully"
+                "KinChatStartup",
+                "✅ Cloudinary initialized (deferred)"
             )
         } catch (e: Exception) {
             AppLogger.e(
-                "KinChatApp",
-                "⚠️ Cloudinary init exception: ${e.message}"
+                "KinChatStartup",
+                "⚠️ Cloudinary deferred initialization failed: ${e.message}",
+                e
             )
         }
-        // --------------------------------
 
-        createNotificationChannels()
+        // --- Notification Channels ---
+        try {
+            createNotificationChannels()
 
-        // IMPORTANT:
-        // ZegoCloud is intentionally NOT initialized here.
-        //
-        // Previously it was initialized during Application startup
-        // using saved credentials, which could add unnecessary work
-        // to the app's critical startup path.
-        //
-        // ZegoCloud will instead be initialized after authentication
-        // from MainActivity.
+            AppLogger.d(
+                "KinChatStartup",
+                "✅ Notification channels initialized (deferred)"
+            )
+        } catch (e: Exception) {
+            AppLogger.e(
+                "KinChatStartup",
+                "⚠️ Notification channel initialization failed: ${e.message}",
+                e
+            )
+        }
+
+        /*
+         * PendingSyncCoordinator is intentionally NOT initialized here.
+         *
+         * MainActivity will start:
+         *   pendingSyncCoordinator.startMonitoring()
+         *   pendingSyncCoordinator.triggerSync()
+         *
+         * after the first UI frame.
+         */
     }
 
     fun initZegoCloud(

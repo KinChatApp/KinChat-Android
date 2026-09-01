@@ -26,12 +26,20 @@ object ChatSyncMapper {
             val updatedAtStr = jsonObj.getStringOrNull("updated_at")
             val updatedAtEpoch = updatedAtStr?.let { Instant.parse(it).toEpochMilli() }
 
-            // 🚀 SENIOR FIX: edited_at আলাদাভাবে রিসিভ করা হচ্ছে
             val editedAtStr = jsonObj.getStringOrNull("edited_at")
             val editedAtEpoch = editedAtStr?.let { Instant.parse(it).toEpochMilli() }
 
             val deletedAtStr = jsonObj.getStringOrNull("deleted_at")
             val deletedAtEpoch = deletedAtStr?.let { Instant.parse(it).toEpochMilli() }
+
+            // 🚀 FIX: Map actual server status instead of hardcoding DELIVERED
+            val statusStr = jsonObj.getStringOrNull("status")?.uppercase()
+            val mappedStatus = when (statusStr) {
+                "READ" -> MessageStatus.READ
+                "DELIVERED" -> MessageStatus.DELIVERED
+                "SENT" -> MessageStatus.SENT
+                else -> MessageStatus.DELIVERED
+            }
 
             ChatMessageEntity(
                 id = jsonObj.getStringOrNull("id") ?: return null,
@@ -39,11 +47,11 @@ object ChatSyncMapper {
                 senderId = jsonObj.getStringOrNull("sender_id") ?: return null,
                 content = jsonObj.getStringOrNull("content"),
                 type = MessageType.valueOf(jsonObj.getStringOrNull("type") ?: "text"),
-                status = MessageStatus.DELIVERED,
+                status = mappedStatus,
                 replyToId = jsonObj.getStringOrNull("reply_to_id"),
                 createdAt = createdAtEpoch,
                 updatedAt = updatedAtEpoch,
-                editedAt = editedAtEpoch, // 🚀 FIX: শুধুমাত্র আসল edited_at সেট হবে
+                editedAt = editedAtEpoch,
                 deletedAt = deletedAtEpoch,
                 isForwarded = jsonObj.getStringOrNull("is_forwarded")?.toBoolean() ?: false,
                 metadataJson = jsonObj.getStringOrNull("metadata"),

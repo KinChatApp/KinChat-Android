@@ -18,7 +18,8 @@ internal data class DashboardSyncResult(
 internal object DashboardMapper {
     fun mapPreviewsToEntities(
         dtos: List<ChatPreviewDto>,
-        currentUserId: String
+        currentUserId: String,
+        realLastMessages: Map<String, ChatMessageEntity>
     ): DashboardSyncResult {
         val chats = mutableListOf<ChatEntity>()
         val participants = mutableListOf<ChatParticipantEntity>()
@@ -28,7 +29,20 @@ internal object DashboardMapper {
 
         dtos.forEach { dto ->
             val timestamp = DashboardDateUtils.parseTimestamp(dto.last_message_time)
-            val dummyMsgId = "${DashboardConstants.DUMMY_MSG_PREFIX}${dto.chat_id}${DashboardConstants.DUMMY_MSG_SUFFIX}"
+            val realMsg = realLastMessages[dto.chat_id]
+
+            // 🚀 FIX: Verify real message by matching EXACT CONTENT or close timestamp.
+            // This prevents replacing a real message with a dummy just because timezones skewed the timestamp.
+            val contentMatches = realMsg != null && dto.last_message_content != null && realMsg.content?.trim() == dto.last_message_content.trim()
+            val timeMatches = realMsg != null && Math.abs(realMsg.createdAt - timestamp) < 60000
+
+            val shouldUseRealMsg = contentMatches || timeMatches
+
+            val finalMsgId = if (shouldUseRealMsg) {
+                realMsg!!.id
+            } else {
+                "${DashboardConstants.DUMMY_MSG_PREFIX}${dto.chat_id}${DashboardConstants.DUMMY_MSG_SUFFIX}"
+            }
 
             chats.add(
                 ChatEntity(
@@ -36,15 +50,14 @@ internal object DashboardMapper {
                     title = dto.other_user_name,
                     isGroup = false,
                     avatarUrl = dto.other_user_avatar,
-                    lastMessageId = dummyMsgId,
-                    lastMessageTime = timestamp,
+                    lastMessageId = finalMsgId,
+                    lastMessageTime = if (shouldUseRealMsg) realMsg!!.createdAt else timestamp,
                     createdBy = null,
                     createdAt = null,
                     updatedAt = currentTime
                 )
             )
 
-            // Current User Participant
             participants.add(
                 ChatParticipantEntity(
                     chatId = dto.chat_id,
@@ -62,7 +75,6 @@ internal object DashboardMapper {
                 )
             )
 
-            // 🚀 FIX: Partner Participant 
             if (!dto.other_user_id.isNullOrBlank() && dto.other_user_id != currentUserId) {
                 participants.add(
                     ChatParticipantEntity(
@@ -82,17 +94,18 @@ internal object DashboardMapper {
                 )
             }
 
-            if (!dto.last_message_content.isNullOrBlank()) {
+            // ONLY create dummy if we don't have the real message
+            if (!shouldUseRealMsg && !dto.last_message_content.isNullOrBlank()) {
                 messages.add(
                     ChatMessageEntity(
-                        id = dummyMsgId,
+                        id = finalMsgId,
                         chatId = dto.chat_id,
-                        senderId = dto.last_message_sender ?: DashboardConstants.SENDER_UNKNOWN, // 🚀 FIX: আসল সেন্ডার আইডি বসানো হলো
+                        senderId = dto.last_message_sender ?: DashboardConstants.SENDER_UNKNOWN,
                         content = dto.last_message_content,
                         type = MessageType.text,
                         status = MessageStatus.DELIVERED,
                         createdAt = timestamp,
-                        isDeletedForMe = false // 🚀 FIX: dummy মেসেজ হাইড করা ছিল, তা false করা হলো
+                        isDeletedForMe = false
                     )
                 )
             }

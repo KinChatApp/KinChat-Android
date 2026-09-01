@@ -1,5 +1,7 @@
 package com.kinchat.app.features.dashboard.ui
 
+import android.Manifest
+import android.content.pm.PackageManager
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -11,9 +13,12 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.kinchat.app.features.chat.ui.components.ChatContextMenu
 import com.kinchat.app.features.dashboard.ui.components.ChatFilterTabs
@@ -33,6 +38,16 @@ fun DashboardScreen(
     viewModel: DashboardViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val context = LocalContext.current
+
+    // 🚀 ড্যাশবোর্ড থেকে অটোমেটিক পারমিশন পপআপ রিমুভ করা হয়েছে। 
+    // তবে আগে থেকে পারমিশন দেওয়া থাকলে সাইলেন্টলি সিঙ্ক করবে।
+    LaunchedEffect(Unit) {
+        val isGranted = ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED
+        if (isGranted) {
+            viewModel.syncContacts()
+        }
+    }
 
     DisposableEffect(Unit) {
         onDispose { viewModel.clearTransientUiState() }
@@ -57,8 +72,8 @@ fun DashboardScreen(
                 .background(MaterialTheme.colorScheme.background)
         ) {
             ChatFilterTabs(
-                selectedFilter = uiState.selectedFilter, // 🚀 FIX: ViewModel-এর স্টেট ব্যবহার
-                onFilterSelected = { viewModel.setFilter(it) } // 🚀 FIX: ViewModel-কে জানানো
+                selectedFilter = uiState.selectedFilter,
+                onFilterSelected = { viewModel.setFilter(it) }
             )
 
             ChatListSection(

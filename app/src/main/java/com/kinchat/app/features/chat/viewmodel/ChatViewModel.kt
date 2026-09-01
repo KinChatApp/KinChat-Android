@@ -9,6 +9,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.kinchat.app.core.logging.AppLogger
 import com.kinchat.app.core.notifications.builder.NotificationSummaryManager
+import com.kinchat.app.core.utils.ContactResolver
 import com.kinchat.app.domain.model.ChatMessage
 import com.kinchat.app.domain.repository.AuthRepository
 import com.kinchat.app.domain.repository.ChatRepository
@@ -40,7 +41,7 @@ class ChatViewModel @Inject constructor(
 
     private val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager?
     private val summaryManager = notificationManager?.let { NotificationSummaryManager(context, it) }
-    
+
     private val _messages = MutableStateFlow<List<ChatMessage>>(emptyList())
     val messages: StateFlow<List<ChatMessage>> = _messages.asStateFlow()
 
@@ -65,8 +66,6 @@ class ChatViewModel @Inject constructor(
     private var roomObserveJob: Job? = null
 
     private var resolvedContactName: String? = null
-    
-    // 🚀 FIX: Prevent redundant UPDATE_LAST_READ using message ID signatures
     private var lastProcessedUnreadSignature: String? = null
 
     init {
@@ -97,7 +96,7 @@ class ChatViewModel @Inject constructor(
 
         initialPassedId = passedId
         resolvedContactName = null
-        lastProcessedUnreadSignature = null // Reset on chat change
+        lastProcessedUnreadSignature = null
         chatObservingJob?.cancel()
 
         chatObservingJob = viewModelScope.launch {
@@ -113,10 +112,19 @@ class ChatViewModel @Inject constructor(
 
             val (instantPartnerId, instantQuickName) = instantInfoDeferred.await()
             val contacts = contactsDeferred.await()
-            val contactName = contacts.find { it.registeredUserId == instantPartnerId }?.contactName?.takeIf { it.isNotBlank() }
-            resolvedContactName = contactName
+            
+            val contact = contacts.find { it.registeredUserId == instantPartnerId }
+            val resolvedName = contact?.let { c ->
+                ContactResolver.resolveDisplayName(
+                    contactName = c.contactName,
+                    profileName = c.profileName,
+                    username = c.username,
+                    phoneNumber = c.contactPhoneNormalized
+                )
+            }?.takeIf { it != "Unknown User" }
 
-            val initialName = contactName ?: instantQuickName ?: "Unknown"
+            resolvedContactName = resolvedName
+            val initialName = resolvedContactName ?: instantQuickName ?: "Unknown"
 
             _partnerState.value = PartnerUiState.Success(id = instantPartnerId.ifEmpty { passedId }, name = initialName)
 
@@ -138,8 +146,7 @@ class ChatViewModel @Inject constructor(
 
                     currentChatId = resolvedChatId
                     ForegroundChatState.setActiveChat(resolvedChatId)
-                    
-                    // 🚀 FIX: Delegate fetchMissedMessages purely to RealtimeChannelManager's SUCCESS callback.
+
                     chatSyncManager.startRealtimeListener(resolvedChatId)
 
                     if (passedId != resolvedChatId) {
@@ -154,31 +161,29 @@ class ChatViewModel @Inject constructor(
     private suspend fun observeMessagesForChat(chatId: String) {
         try {
             chatRepository.observeMessages(chatId).collectLatest { msgs ->
-                val filteredMsgs = msgs.distinctBy { it.id }
+                val filteredMsgs = msgs.distinctBy { it.id }.filterNot { it.id.startsWith("msg_") && it.id.endsWith("_last") }
                 _messages.value = filteredMsgs
 
                 if (currentUserId.isNotEmpty()) {
                     try {
-                        // 🚀 FIX: Ignore synthetic dashboard messages and use strict unread checking
                         val unreadMessages = filteredMsgs.filter { message ->
-                            val isSyntheticMessage = message.id.startsWith("msg_") && message.id.endsWith("_last")
-                            
-                            !isSyntheticMessage && 
-                            message.senderId != currentUserId && 
+                            message.senderId != currentUserId &&
                             message.localStatus?.uppercase() != "READ"
                         }
-                        
+
                         val unreadSignature = unreadMessages.map { it.id }.sorted().joinToString("|")
-                        
+
                         if (unreadMessages.isNotEmpty() && unreadSignature != lastProcessedUnreadSignature) {
                             AppLogger.d("ChatVM", "Found ${unreadMessages.size} unread messages. Enqueuing READ update.")
+
+                            lastProcessedUnreadSignature = unreadSignature
                             val result = chatRepository.updateLastRead(chatId, currentUserId)
-                            
-                            if (result.isSuccess) {
-                                lastProcessedUnreadSignature = unreadSignature
+
+                            if (result.isFailure) {
+                                lastProcessedUnreadSignature = null
                             }
                         }
-                        
+
                         notificationManager?.cancel(chatId.hashCode())
                         summaryManager?.updateSummaryNotification()
                     } catch (e: kotlinx.coroutines.CancellationException) {

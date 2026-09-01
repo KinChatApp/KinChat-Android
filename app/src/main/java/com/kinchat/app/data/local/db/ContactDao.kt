@@ -1,6 +1,7 @@
 package com.kinchat.app.data.local.db
 
 import androidx.room.Dao
+import androidx.room.Delete
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
@@ -13,4 +14,7 @@ interface ContactDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertContacts(contacts: List<ContactEntity>)
+
+    @Delete
+    suspend fun deleteContacts(contacts: List<ContactEntity>)
 }

@@ -4,17 +4,29 @@ import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.composable
 import com.kinchat.app.features.auth.ui.LoginScreen
+import com.kinchat.app.features.auth.ui.OnboardingContactsScreen
 import com.kinchat.app.navigation.NavRoutes
 
-/** Login destination. (Splash is now handled natively) */
 fun NavGraphBuilder.authNavGraph(
-    navController: NavHostController // 🚀 authRepository প্যারামিটার রিমুভ করা হয়েছে
+    navController: NavHostController
 ) {
     composable(NavRoutes.LOGIN) {
         LoginScreen(
             onLoginSuccess = {
-                navController.navigate(NavRoutes.DASHBOARD) {
+                // 🚀 লগইন সাকসেস হলে ড্যাশবোর্ডে না গিয়ে পারমিশন পেজে যাবে
+                navController.navigate("onboarding_contacts") {
                     popUpTo(NavRoutes.LOGIN) { inclusive = true }
+                }
+            }
+        )
+    }
+
+    composable("onboarding_contacts") {
+        OnboardingContactsScreen(
+            onFinish = {
+                // 🚀 পারমিশন দেওয়া বা স্কিপ করা হলে ড্যাশবোর্ডে যাবে
+                navController.navigate(NavRoutes.DASHBOARD) {
+                    popUpTo("onboarding_contacts") { inclusive = true }
                 }
             }
         )

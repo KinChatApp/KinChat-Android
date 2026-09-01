@@ -9,5 +9,8 @@ data class ContactEntity(
     val contactName: String,
     val contactPhone: String,
     val contactPhoneNormalized: String,
-    val registeredUserId: String? = null
+    val registeredUserId: String? = null,
+    val profileName: String? = null,
+    val username: String? = null,
+    val avatarUrl: String? = null
 )

@@ -12,13 +12,19 @@ data class UserContact(
     @SerialName("contact_name") val contactName: String,
     @SerialName("contact_phone") val contactPhone: String,
     @SerialName("contact_phone_normalized") val contactPhoneNormalized: String,
-    @SerialName("registered_user_id") val registeredUserId: String? = null
+    @SerialName("registered_user_id") val registeredUserId: String? = null,
+    val profileName: String? = null,
+    val username: String? = null,
+    val avatarUrl: String? = null
 )
 
 @Serializable
 data class RegisteredUserDto(
     @SerialName("id") val id: String,
-    @SerialName("phone") val phone: String
+    @SerialName("phone") val phone: String,
+    @SerialName("display_name") val displayName: String? = null,
+    @SerialName("username") val username: String? = null,
+    @SerialName("avatar_url") val avatarUrl: String? = null
 )
 
 data class ContactSyncResult(

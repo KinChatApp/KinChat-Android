@@ -3,6 +3,7 @@ package com.kinchat.app.features.dashboard.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.kinchat.app.core.logging.AppLogger
+import com.kinchat.app.core.utils.ContactResolver
 import com.kinchat.app.domain.model.Chat
 import com.kinchat.app.domain.repository.DashboardRepository
 import com.kinchat.app.domain.repository.ChatRepository
@@ -43,6 +44,19 @@ class DashboardViewModel @Inject constructor(
         loadChats()
     }
 
+    fun syncContacts() {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val syncResult = contactsUseCases.syncDeviceContacts()
+                if (syncResult.isSuccess) {
+                    contactsUseCases.loadRemoteContacts()
+                }
+            } catch (e: Exception) {
+                AppLogger.d("DashboardViewModel", "Background sync skipped (likely no permissions yet)")
+            }
+        }
+    }
+
     fun setFilter(filter: String) {
         _uiState.update { state ->
             state.copy(
@@ -77,21 +91,8 @@ class DashboardViewModel @Inject constructor(
                 }
 
             combine(contactsFlow, chatsFlow) { contacts, chatList ->
-                // 🚀 FIX: কন্টাক্ট আইডির কোটেশন মুছে ফেলা হলো
-                val currentContacts = contacts
-                    .mapNotNull { it.registeredUserId?.replace("\"", "")?.trim()?.let { id -> id to it.contactName } }
-                    .toMap()
-
                 chatList.map { chat ->
-                    val cleanPartnerId = chat.partnerId?.replace("\"", "")?.trim()
-                    var matchedName = currentContacts[cleanPartnerId]
-                    
-                    // 🚀 FIX: আইডি দিয়ে না পেলে সরাসরি কন্টাক্টের নাম দিয়ে খোঁজার ফলব্যাক লজিক
-                    if (matchedName == null) {
-                        matchedName = contacts.find { it.contactName.equals(chat.name, ignoreCase = true) }?.contactName
-                    }
-                    
-                    chat.copy(name = matchedName ?: chat.name)
+                    chat.copy(name = ContactResolver.resolveChatName(chat, contacts))
                 }.sortedByDescending { it.isPinned }
             }.collect { finalChats ->
                 _uiState.update { state ->

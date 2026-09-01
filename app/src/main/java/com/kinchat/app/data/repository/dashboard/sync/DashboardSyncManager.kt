@@ -3,6 +3,7 @@ package com.kinchat.app.data.repository.dashboard.sync
 import android.util.Log
 import com.kinchat.app.data.local.db.ChatDao
 import com.kinchat.app.data.local.db.ChatMessageDao
+import com.kinchat.app.data.local.db.ChatMessageEntity
 import com.kinchat.app.data.local.db.ChatParticipantDao
 import com.kinchat.app.data.remote.model.ChatPreviewDto
 import com.kinchat.app.data.repository.dashboard.mapper.DashboardMapper
@@ -26,12 +27,21 @@ internal class DashboardSyncManager(
 
             if (dtos.isEmpty()) return
 
-            val syncResult = DashboardMapper.mapPreviewsToEntities(dtos, currentUserId)
-            
+            // 🚀 NEW: Fetch real messages from local DB to resolve status properly
+            val realMessagesMap = mutableMapOf<String, ChatMessageEntity>()
+            dtos.forEach { dto ->
+                val realMsg = chatMessageDao.getLatestRealMessage(dto.chat_id)
+                if (realMsg != null) {
+                    realMessagesMap[dto.chat_id] = realMsg
+                }
+            }
+
+            val syncResult = DashboardMapper.mapPreviewsToEntities(dtos, currentUserId, realMessagesMap)
+
             chatDao.insertChats(syncResult.chats)
             chatParticipantDao.insertParticipants(syncResult.participants)
             chatMessageDao.insertMessages(syncResult.messages)
-            
+
         } catch (e: Exception) {
             Log.e("DashboardSyncManager", "Sync error", e)
         }

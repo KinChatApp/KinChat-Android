@@ -3,6 +3,7 @@ package com.kinchat.app.data.repository.chat.sync.fetcher
 import android.util.Log
 import com.kinchat.app.core.logging.AppLogger
 import com.kinchat.app.data.local.db.ChatMessageDao
+import com.kinchat.app.data.local.db.MessageStatus
 import com.kinchat.app.data.repository.chat.sync.mapper.ChatSyncMapper
 import com.kinchat.app.data.repository.chat.sync.utils.SyncRetryHelper.retryWithBackoff
 import io.github.jan.supabase.SupabaseClient
@@ -13,6 +14,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import java.time.Instant
 import javax.inject.Inject
 
@@ -24,20 +26,17 @@ class MissedMessageFetcher @Inject constructor(
         withContext(Dispatchers.IO) {
             try {
                 supabaseClient.auth.awaitInitialization()
+                val currentUser = supabaseClient.auth.currentSessionOrNull()?.user
 
-                if (supabaseClient.auth.currentSessionOrNull() == null) {
-                    AppLogger.d(
-                        TAG,
-                        "⏭️ Skipping missed-message fetch: no authenticated session"
-                    )
+                if (currentUser == null) {
+                    AppLogger.d(TAG, "⏭️ Skipping missed-message fetch: no authenticated session")
                     return@withContext
                 }
-
+                
                 retryWithBackoff {
                     val lastSyncEpoch = chatMessageDao.getLastMessageTimestamp(chatId) ?: 0L
                     val lastEditEpoch = chatMessageDao.getLastUpdatedTimestamp(chatId) ?: 0L
                     val targetEpoch = maxOf(lastSyncEpoch, lastEditEpoch)
-
                     val isInitialSync = targetEpoch == 0L
 
                     var offset = 0L
@@ -65,7 +64,6 @@ class MissedMessageFetcher @Inject constructor(
                             }
 
                             if (entities.isNotEmpty()) {
-                                // 🚀 FIX: Batch process items into a single Room Transaction
                                 chatMessageDao.upsertMessagesMerged(entities)
                             }
 
@@ -77,6 +75,33 @@ class MissedMessageFetcher @Inject constructor(
                         } else {
                             hasMore = false
                         }
+                    }
+
+                    // 🚀 FIX: Targeted Receipt Recovery (No cursor guesswork)
+                    val pendingIds = chatMessageDao.getPendingMessageIds(chatId, currentUser.id)
+                    if (pendingIds.isNotEmpty()) {
+                        pendingIds.chunked(100).forEach { chunk ->
+                            val receiptsArray = supabaseClient.postgrest[TABLE_RECEIPTS]
+                                .select {
+                                    filter { isIn("message_id", chunk) }
+                                }.decodeList<JsonObject>()
+
+                            receiptsArray.forEach { receiptObj ->
+                                val msgId = receiptObj["message_id"]?.jsonPrimitive?.content ?: return@forEach
+                                val statusStr = receiptObj["status"]?.jsonPrimitive?.content?.uppercase()
+
+                                val mappedStatus = when (statusStr) {
+                                    "READ" -> MessageStatus.READ
+                                    "DELIVERED" -> MessageStatus.DELIVERED
+                                    else -> null
+                                }
+
+                                if (mappedStatus != null) {
+                                    chatMessageDao.updateMessageStatus(msgId, mappedStatus)
+                                }
+                            }
+                        }
+                        AppLogger.d(TAG, "✅ Recovered receipts for ${pendingIds.size} pending messages in chat $chatId")
                     }
                 }
             } catch (e: CancellationException) {
@@ -91,6 +116,7 @@ class MissedMessageFetcher @Inject constructor(
     companion object {
         private const val TAG = "MissedMessageFetcher"
         private const val TABLE_MESSAGES = "messages"
+        private const val TABLE_RECEIPTS = "message_receipts"
         private const val COLUMN_CHAT_ID = "chat_id"
     }
 }

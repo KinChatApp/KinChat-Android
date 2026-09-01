@@ -1,6 +1,5 @@
 package com.kinchat.app.features.contacts.viewmodel
 
-import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.kinchat.app.domain.model.UserContact
@@ -15,6 +14,7 @@ import javax.inject.Inject
 data class ContactsUiState(
     val isLoading: Boolean = true,
     val isSyncing: Boolean = false,
+    val hasContactsPermission: Boolean = false,
     val registeredContacts: List<UserContact> = emptyList(),
     val unregisteredContacts: List<UserContact> = emptyList(),
     val errorMsg: String? = null
@@ -33,7 +33,6 @@ class ContactsViewModel @Inject constructor(
     val resolvedChatId: StateFlow<String?> = _resolvedChatId.asStateFlow()
 
     init {
-        loadContacts()
         observeContacts()
     }
 
@@ -52,7 +51,6 @@ class ContactsViewModel @Inject constructor(
                     .associateBy { it.contactPhoneNormalized }
                     .values.toList()
 
-                // 🚀 FIX: অ্যালফাবেটিক্যালি সর্ট করা হচ্ছে (A-Z)
                 val sortedRegistered = uniqueRegistered.sortedBy { it.contactName.trim().lowercase() }
                 val sortedUnregistered = unregistered.sortedBy { it.contactName.trim().lowercase() }
 
@@ -67,20 +65,21 @@ class ContactsViewModel @Inject constructor(
             .launchIn(viewModelScope)
     }
 
-    private fun loadContacts() {
-        viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true) }
-            contactsUseCases.loadRemoteContacts()
+    fun updatePermissionState(isGranted: Boolean) {
+        _uiState.update { it.copy(hasContactsPermission = isGranted) }
+        if (isGranted) {
+            syncContacts()
         }
     }
 
     fun syncContacts() {
         viewModelScope.launch {
             _uiState.update { it.copy(isSyncing = true, errorMsg = null) }
+            
+            // ৫. Sequential execution: Device Sync -> Remote Mapping -> isSyncing = false
             val result = contactsUseCases.syncDeviceContacts()
-
             if (result.isSuccess) {
-                contactsUseCases.loadRemoteContacts()
+                contactsUseCases.loadRemoteContacts() 
             }
 
             _uiState.update { it.copy(isSyncing = false, errorMsg = result.errorMessage) }
@@ -105,10 +104,5 @@ class ContactsViewModel @Inject constructor(
 
     fun onChatNavigated() {
         _resolvedChatId.value = null
-    }
-
-    companion object {
-        private const val TAG = "ContactsViewModel"
-        private val NON_DIGIT_REGEX = Regex("\\D")
     }
 }

@@ -14,7 +14,6 @@ import io.github.jan.supabase.postgrest.postgrest
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.first
-import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -36,7 +35,10 @@ class ContactsRepositoryImpl @Inject constructor(
                     contactName = it.contactName,
                     contactPhone = it.contactPhone,
                     contactPhoneNormalized = it.contactPhoneNormalized,
-                    registeredUserId = it.registeredUserId
+                    registeredUserId = it.registeredUserId,
+                    profileName = it.profileName,
+                    username = it.username,
+                    avatarUrl = it.avatarUrl
                 )
             }
         }
@@ -45,16 +47,34 @@ class ContactsRepositoryImpl @Inject constructor(
     override suspend fun syncDeviceContacts(): ContactSyncResult {
         return try {
             val deviceContacts = localDataSource.getDeviceContacts()
+            val existingContacts = contactDao.observeAllContacts().first().associateBy { it.contactPhoneNormalized }
 
-            val contactEntities = deviceContacts.map { deviceContact ->
-                val normalizedPhone = phoneSanitizer.sanitize(deviceContact.phone)
-                ContactEntity(
-                    id = UUID.randomUUID().toString(),
-                    contactName = deviceContact.name,
-                    contactPhone = deviceContact.phone,
-                    contactPhoneNormalized = normalizedPhone,
-                    registeredUserId = null
-                )
+            val contactEntities = deviceContacts
+                .map { it.copy(phone = phoneSanitizer.sanitize(it.phone)) }
+                .filter { it.phone.isNotBlank() }
+                .associateBy { it.phone }
+                .values
+                .map { deviceContact ->
+                    val normalizedPhone = deviceContact.phone
+                    val existing = existingContacts[normalizedPhone]
+
+                    ContactEntity(
+                        id = normalizedPhone,
+                        contactPhoneNormalized = normalizedPhone,
+                        contactName = deviceContact.name, 
+                        contactPhone = deviceContact.phone,
+                        registeredUserId = existing?.registeredUserId,
+                        profileName = existing?.profileName,
+                        username = existing?.username,
+                        avatarUrl = existing?.avatarUrl
+                    )
+                }
+
+            val currentNormalizedPhones = contactEntities.map { it.contactPhoneNormalized }.toSet()
+            val staleContacts = existingContacts.values.filter { it.contactPhoneNormalized !in currentNormalizedPhones }
+
+            if (staleContacts.isNotEmpty()) {
+                contactDao.deleteContacts(staleContacts)
             }
 
             if (contactEntities.isNotEmpty()) {
@@ -69,35 +89,34 @@ class ContactsRepositoryImpl @Inject constructor(
 
     override suspend fun loadContactsFromRemote() {
         try {
-            // ১. Room ডেটাবেস থেকে সব সেভ করা কন্টাক্ট নিন
             val localContacts = contactDao.observeAllContacts().first()
             if (localContacts.isEmpty()) return
 
             val normalizedPhones = localContacts.map { it.contactPhoneNormalized }.filter { it.isNotEmpty() }
             if (normalizedPhones.isEmpty()) return
 
-            // ২. Supabase থেকে এই নম্বরগুলোর সাথে ম্যাচ করা ইউজারদের আনুন
-            // ⚠️ আপনার Supabase টেবিলের নাম যদি 'profiles' বা অন্য কিছু হয়, তবে 'users' পরিবর্তন করে সেই নাম দিন
-            val registeredUsers = supabaseClient.postgrest["users"] 
-                .select {
-                    filter {
-                        isIn("phone", normalizedPhones)
-                    }
-                }.decodeList<RegisteredUserDto>()
-
-            if (registeredUsers.isEmpty()) return
-
-            // ৩. লোকাল কন্টাক্টগুলোর registeredUserId আপডেট করুন
-            val updatedContacts = localContacts.map { localContact ->
-                val matchedUser = registeredUsers.find { it.phone == localContact.contactPhoneNormalized }
-                if (matchedUser != null) {
-                    localContact.copy(registeredUserId = matchedUser.id)
-                } else {
-                    localContact
-                }
+            val registeredUsersMap = try {
+                supabaseClient.postgrest["users"]
+                    .select {
+                        filter {
+                            isIn("phone", normalizedPhones)
+                        }
+                    }.decodeList<RegisteredUserDto>().associateBy { it.phone }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                return 
             }
 
-            // ৪. আপডেট করা কন্টাক্টগুলো আবার Room-এ সেভ করুন
+            val updatedContacts = localContacts.map { localContact ->
+                val matchedUser = registeredUsersMap[localContact.contactPhoneNormalized]
+                localContact.copy(
+                    registeredUserId = matchedUser?.id,
+                    profileName = matchedUser?.displayName,
+                    username = matchedUser?.username,
+                    avatarUrl = matchedUser?.avatarUrl
+                )
+            }
+
             contactDao.insertContacts(updatedContacts)
 
         } catch (e: Exception) {

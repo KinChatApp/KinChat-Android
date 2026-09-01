@@ -13,7 +13,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -24,6 +23,7 @@ import coil.compose.AsyncImage
 import com.kinchat.app.core.designsystem.LocalExtendedColors
 import com.kinchat.app.core.utils.ChatFormatters
 import com.kinchat.app.domain.model.Chat
+import com.kinchat.app.domain.model.TickState
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -72,7 +72,9 @@ private fun ChatAvatar(avatarUrl: String?) {
                 imageVector = Icons.Default.Person,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.matchParentSize().padding(8.dp)
+                modifier = Modifier
+                    .matchParentSize()
+                    .padding(8.dp)
             )
         }
     }
@@ -87,10 +89,7 @@ private fun ChatContent(chat: Chat, modifier: Modifier = Modifier) {
             hasUnread = chat.unreadCount > 0
         )
         Spacer(modifier = Modifier.height(4.dp))
-        ChatSubtitle(
-            lastMessage = chat.lastMessage,
-            unreadCount = chat.unreadCount
-        )
+        ChatSubtitle(chat = chat)
     }
 }
 
@@ -119,21 +118,43 @@ private fun ChatHeader(name: String, timestamp: Long, hasUnread: Boolean) {
 }
 
 @Composable
-private fun ChatSubtitle(lastMessage: String?, unreadCount: Int) {
+private fun ChatSubtitle(chat: Chat) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(
-            text = lastMessage ?: "No messages yet",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f)
-        )
-        if (unreadCount > 0) {
+        Row(
+            modifier = Modifier.weight(1f),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // 🚀 FIX: Added Tick Icons for messages sent by current user
+            if (chat.isLastMessageFromMe && chat.tickState != null) {
+                val (icon, tint) = when (chat.tickState) {
+                    TickState.SENDING -> Icons.Default.Schedule to MaterialTheme.colorScheme.onSurfaceVariant
+                    TickState.SENT -> Icons.Default.Done to MaterialTheme.colorScheme.onSurfaceVariant
+                    TickState.DELIVERED -> Icons.Default.DoneAll to MaterialTheme.colorScheme.onSurfaceVariant
+                    TickState.READ -> Icons.Default.DoneAll to MaterialTheme.colorScheme.primary
+                    TickState.FAILED -> Icons.Default.ErrorOutline to MaterialTheme.colorScheme.error
+                }
+                Icon(
+                    imageVector = icon,
+                    contentDescription = "Message Status",
+                    tint = tint,
+                    modifier = Modifier
+                        .padding(end = 4.dp)
+                        .size(16.dp)
+                )
+            }
+            Text(
+                text = chat.lastMessage ?: "No messages yet",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        if (chat.unreadCount > 0) {
             Box(
                 modifier = Modifier
                     .padding(start = 8.dp)
@@ -142,7 +163,7 @@ private fun ChatSubtitle(lastMessage: String?, unreadCount: Int) {
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = unreadCount.toString(),
+                    text = chat.unreadCount.toString(),
                     style = MaterialTheme.typography.labelSmall,
                     color = LocalExtendedColors.current.unreadBadgeText,
                     fontWeight = FontWeight.Bold

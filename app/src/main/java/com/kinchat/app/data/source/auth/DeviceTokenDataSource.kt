@@ -32,6 +32,12 @@ class DeviceTokenDataSourceImpl @Inject constructor(
     override suspend fun saveDeviceToken(userId: String, token: String) {
         withContext(Dispatchers.IO) {
             try {
+                // 🚀 FIX: Delete ALL existing tokens for this user to strictly prevent duplicate notifications.
+                // (Since we don't have a unique device_id in the schema yet)
+                supabase.from("user_devices").delete {
+                    filter { eq("user_id", userId) }
+                }
+
                 val deviceData = DeviceTokenDto(
                     userId = userId,
                     deviceToken = token,
@@ -39,7 +45,7 @@ class DeviceTokenDataSourceImpl @Inject constructor(
                     isActive = true
                 )
                 supabase.from("user_devices").upsert(deviceData)
-                AppLogger.d("FCM_SYNC", "✅ Successfully saved token to Supabase!")
+                AppLogger.d("FCM_SYNC", "✅ Saved new token and cleared old ones to prevent duplicate pushes.")
             } catch (e: Exception) {
                 AppLogger.e("FCM_SYNC", "❌ Supabase Insert/Upsert Failed.", e)
                 throw e

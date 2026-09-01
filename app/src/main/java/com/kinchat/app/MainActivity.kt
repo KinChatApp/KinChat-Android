@@ -6,6 +6,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -33,6 +34,7 @@ import com.kinchat.app.domain.repository.SettingsRepository
 import com.kinchat.app.navigation.AppNavigation
 import com.kinchat.app.navigation.NavRoutes
 import com.zegocloud.uikit.prebuilt.call.ZegoUIKitPrebuiltCallService
+import dagger.Lazy
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
@@ -42,28 +44,57 @@ import kotlinx.coroutines.launch
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
 
+    /*
+     * Lazy dependencies prevent unnecessary dependency initialization
+     * during Activity startup.
+     */
     @Inject
-    lateinit var authRepository: AuthRepository
+    lateinit var authRepository: Lazy<AuthRepository>
 
     @Inject
-    lateinit var settingsRepository: SettingsRepository
-    
+    lateinit var settingsRepository: Lazy<SettingsRepository>
+
     @Inject
-    lateinit var pendingSyncCoordinator: PendingSyncCoordinator
+    lateinit var pendingSyncCoordinator: Lazy<PendingSyncCoordinator>
 
     private val pendingChatId = MutableStateFlow<String?>(null)
 
-    // Prevent duplicate Zego initialization for the same user.
+    /*
+     * Default settings are available immediately.
+     * Actual settings are loaded after the UI has started.
+     */
+    private val userSettings = MutableStateFlow(UserSettings())
+
+    /*
+     * Prevent duplicate Zego initialization for the same user.
+     */
     private var zegoInitializedForUserId: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
+
+        AppLogger.startup(
+            "MainActivity.onCreate START"
+        )
+
         installSplashScreen()
+
         super.onCreate(savedInstanceState)
+
+        AppLogger.startup(
+            "MainActivity after super.onCreate"
+        )
 
         handleNotificationIntent(intent)
 
-        val prefs = getSharedPreferences("ZegoPrefs", Context.MODE_PRIVATE)
+        val prefs = getSharedPreferences(
+            "ZegoPrefs",
+            Context.MODE_PRIVATE
+        )
 
+        /*
+         * Use locally saved user id only to decide the first route.
+         * No Supabase authentication wait here.
+         */
         val savedUserId = prefs
             .getString("userId", null)
             ?.trim()
@@ -75,195 +106,457 @@ class MainActivity : ComponentActivity() {
                 NavRoutes.LOGIN
             }
 
-        /*
-         * Compose UI is established first.
-         * Authentication observation and Zego initialization do not
-         * participate in the initial Dashboard rendering path.
-         */
+        AppLogger.startup(
+            "Initial route resolved: $initialRoute"
+        )
+
+        AppLogger.startup(
+            "Before setContent"
+        )
+
         setContent {
 
-            val userSettings by settingsRepository
-                .getUserSettingsFlow()
-                .collectAsState(
-                    initial = UserSettings()
+            /*
+             * ============================================================
+             * PHASE 1
+             * ============================================================
+             *
+             * Render only a lightweight surface first.
+             *
+             * This allows Android's splash screen to finish quickly
+             * without immediately composing Dashboard + navigation +
+             * chat list + other feature trees.
+             */
+            var mainContentReady by remember {
+                mutableStateOf(false)
+            }
+
+            /*
+             * After the first lightweight composition is committed,
+             * switch to the real application UI.
+             */
+            LaunchedEffect(Unit) {
+
+                AppLogger.startup(
+                    "LIGHTWEIGHT FIRST COMPOSITION"
                 )
 
-            val isDarkTheme = when (userSettings.theme.lowercase()) {
-                "dark" -> true
-                "light" -> false
-                else -> isSystemInDarkTheme()
+                mainContentReady = true
+
+                AppLogger.startup(
+                    "MAIN CONTENT ENABLED"
+                )
             }
 
             KinChatTheme(
-                darkTheme = isDarkTheme
+                darkTheme = if (mainContentReady) {
+                    when (userSettings.value.theme.lowercase()) {
+                        "dark" -> true
+                        "light" -> false
+                        else -> isSystemInDarkTheme()
+                    }
+                } else {
+                    isSystemInDarkTheme()
+                }
             ) {
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.background
-                ) {
 
-                    var showBatteryDialog by remember {
-                        mutableStateOf(
-                            BatteryOptimizationHelper
-                                .shouldShowPrompt(this@MainActivity)
+                /*
+                 * PHASE 1: lightweight first frame.
+                 */
+                if (!mainContentReady) {
+
+                    Surface(
+                        modifier = Modifier.fillMaxSize(),
+                        color = MaterialTheme.colorScheme.background
+                    ) {
+                        Box(
+                            modifier = Modifier.fillMaxSize()
                         )
                     }
 
-                    if (showBatteryDialog) {
-                        BatteryOptimizationDialog(
-                            onDismiss = {
-                                BatteryOptimizationHelper
-                                    .markPromptShown(this@MainActivity)
+                } else {
 
-                                showBatteryDialog = false
-                            },
-                            onConfirm = {
-                                BatteryOptimizationHelper
-                                    .markPromptShown(this@MainActivity)
+                    /*
+                     * ====================================================
+                     * PHASE 2
+                     * ====================================================
+                     *
+                     * Full application UI starts only after the first
+                     * lightweight frame has been committed.
+                     */
 
-                                showBatteryDialog = false
+                    val currentUserSettings by userSettings
+                        .collectAsState()
 
-                                BatteryOptimizationHelper
-                                    .requestIgnoreBatteryOptimizations(
-                                        this@MainActivity
-                                    )
+                    val isDarkTheme = when (
+                        currentUserSettings.theme.lowercase()
+                    ) {
+                        "dark" -> true
+                        "light" -> false
+                        else -> isSystemInDarkTheme()
+                    }
+
+                    /*
+                     * The theme may change after real settings arrive.
+                     */
+                    KinChatTheme(
+                        darkTheme = isDarkTheme
+                    ) {
+
+                        Surface(
+                            modifier = Modifier.fillMaxSize(),
+                            color = MaterialTheme.colorScheme.background
+                        ) {
+
+                            var showBatteryDialog by remember {
+                                mutableStateOf(
+                                    BatteryOptimizationHelper
+                                        .shouldShowPrompt(
+                                            this@MainActivity
+                                        )
+                                )
                             }
-                        )
-                    }
 
-                    NotificationPermissionEffect()
+                            if (showBatteryDialog) {
+                                BatteryOptimizationDialog(
+                                    onDismiss = {
+                                        BatteryOptimizationHelper
+                                            .markPromptShown(
+                                                this@MainActivity
+                                            )
 
-                    val navController = rememberNavController()
+                                        showBatteryDialog = false
+                                    },
+                                    onConfirm = {
+                                        BatteryOptimizationHelper
+                                            .markPromptShown(
+                                                this@MainActivity
+                                            )
 
-                    val targetChatId by pendingChatId
-                        .collectAsState(initial = null)
+                                        showBatteryDialog = false
 
-                    LaunchedEffect(targetChatId) {
-                        val id = targetChatId ?: return@LaunchedEffect
+                                        BatteryOptimizationHelper
+                                            .requestIgnoreBatteryOptimizations(
+                                                this@MainActivity
+                                            )
+                                    }
+                                )
+                            }
 
-                        try {
-                            navController.navigate("chat/$id")
-                        } catch (e: Exception) {
-                            AppLogger.e(
-                                "Navigation",
-                                "Failed to navigate to chat: ${e.message}",
-                                e
-                            )
+                            NotificationPermissionEffect()
+
+                            val navController =
+                                rememberNavController()
+
+                            val targetChatId by pendingChatId
+                                .collectAsState(
+                                    initial = null
+                                )
+
+                            LaunchedEffect(targetChatId) {
+
+                                val id =
+                                    targetChatId
+                                        ?: return@LaunchedEffect
+
+                                try {
+                                    navController.navigate(
+                                        "chat/$id"
+                                    )
+                                } catch (e: Exception) {
+                                    AppLogger.e(
+                                        "Navigation",
+                                        "Failed to navigate to chat: ${e.message}",
+                                        e
+                                    )
+                                }
+
+                                pendingChatId.value = null
+                            }
+
+                            MainLayout {
+
+                                AppNavigation(
+                                    navController = navController,
+                                    startDestination = initialRoute
+                                )
+                            }
                         }
-
-                        pendingChatId.value = null
-                    }
-
-                    MainLayout {
-                        AppNavigation(
-                            navController = navController,
-                            startDestination = initialRoute
-                        )
                     }
                 }
             }
         }
 
+        AppLogger.startup(
+            "After setContent"
+        )
+
+        AppLogger.startup(
+            "MainActivity.onCreate END"
+        )
+
         /*
-         * Authentication state is observed off the main thread.
+         * ================================================================
+         * DEFERRED STARTUP
+         * ================================================================
          *
-         * Zego initialization is deferred with decorView.post so the
-         * initial UI gets a chance to render before the call SDK starts.
+         * These services do not participate in the initial frame:
+         *
+         * - OneSignal
+         * - Cloudinary
+         * - Notification channels
+         * - Settings repository
+         * - Sync monitoring
+         * - Authentication observer
+         * - Zego initialization
          */
-        lifecycleScope.launch(Dispatchers.IO) {
+        window.decorView.post {
 
-            authRepository
-                .observeAuthState()
-                .collect { state ->
+            if (isFinishing || isDestroyed) {
+                AppLogger.startup(
+                    "Deferred startup cancelled: Activity destroyed"
+                )
+                return@post
+            }
 
-                    when (state) {
+            AppLogger.startup(
+                "Deferred callback START"
+            )
 
-                        is AppAuthState.Authenticated -> {
+            /*
+             * Deferred application services.
+             */
+            try {
 
-                            val userId = state.userId.trim()
+                AppLogger.startup(
+                    "Before initializeDeferredServices"
+                )
 
-                            if (userId.isBlank()) {
-                                return@collect
-                            }
+                (application as KinChatApplication)
+                    .initializeDeferredServices()
 
-                            prefs.edit()
-                                .putString("userId", userId)
-                                .putString("userName", state.userName)
-                                .apply()
+                AppLogger.startup(
+                    "After initializeDeferredServices"
+                )
 
-                            pendingSyncCoordinator.triggerSync()
+            } catch (e: Exception) {
 
-                            if (zegoInitializedForUserId == userId) {
-                                return@collect
-                            }
+                AppLogger.e(
+                    "KinChatStartup",
+                    "Deferred application initialization failed: ${e.message}",
+                    e
+                )
+            }
 
-                            zegoInitializedForUserId = userId
+            /*
+             * Settings observation.
+             */
+            lifecycleScope.launch(Dispatchers.IO) {
 
-                            window.decorView.post {
+                AppLogger.startup(
+                    "Settings coroutine START"
+                )
 
-                                if (isFinishing || isDestroyed) {
-                                    return@post
-                                }
+                try {
 
-                                try {
-                                    AppLogger.d(
-                                        "ZegoCloud",
-                                        "Initializing ZegoCloud after initial UI scheduling"
-                                    )
-
-                                    (application as KinChatApplication)
-                                        .initZegoCloud(
-                                            userId = userId,
-                                            userName = state.userName
-                                        )
-
-                                } catch (e: Exception) {
-                                    AppLogger.e(
-                                        "ZegoCloud",
-                                        "Deferred Zego initialization failed: ${e.message}",
-                                        e
-                                    )
-                                }
-                            }
+                    settingsRepository
+                        .get()
+                        .getUserSettingsFlow()
+                        .collect { settings ->
+                            userSettings.value = settings
                         }
 
-                        is AppAuthState.Unauthenticated -> {
+                } catch (e: Exception) {
 
-                            prefs.edit()
-                                .clear()
-                                .apply()
-
-                            zegoInitializedForUserId = null
-
-                            launch(Dispatchers.Main) {
-                                try {
-                                    ZegoUIKitPrebuiltCallService.unInit()
-                                } catch (e: Exception) {
-                                    AppLogger.e(
-                                        "ZegoCloud",
-                                        "ZegoCloud unInit failed: ${e.message}",
-                                        e
-                                    )
-                                }
-                            }
-                        }
-
-                        else -> {
-                            // Unknown auth state: no action.
-                        }
-                    }
+                    AppLogger.e(
+                        "StartupSettings",
+                        "Failed to observe user settings: ${e.message}",
+                        e
+                    )
                 }
+            }
+
+            /*
+             * Authentication + sync.
+             */
+            lifecycleScope.launch(Dispatchers.IO) {
+
+                AppLogger.startup(
+                    "Auth/Sync coroutine START"
+                )
+
+                try {
+
+                    AppLogger.startup(
+                        "Before pendingSyncCoordinator.startMonitoring"
+                    )
+
+                    pendingSyncCoordinator
+                        .get()
+                        .startMonitoring()
+
+                    AppLogger.startup(
+                        "After pendingSyncCoordinator.startMonitoring"
+                    )
+
+                    AppLogger.startup(
+                        "Before pendingSyncCoordinator.triggerSync"
+                    )
+
+                    pendingSyncCoordinator
+                        .get()
+                        .triggerSync()
+
+                    AppLogger.startup(
+                        "After pendingSyncCoordinator.triggerSync"
+                    )
+
+                } catch (e: Exception) {
+
+                    AppLogger.e(
+                        "StartupSync",
+                        "Failed to start deferred sync: ${e.message}",
+                        e
+                    )
+                }
+
+                try {
+
+                    AppLogger.startup(
+                        "Before observeAuthState"
+                    )
+
+                    authRepository
+                        .get()
+                        .observeAuthState()
+                        .collect { state ->
+
+                            when (state) {
+
+                                is AppAuthState.Authenticated -> {
+
+                                    val userId =
+                                        state.userId.trim()
+
+                                    if (userId.isBlank()) {
+                                        return@collect
+                                    }
+
+                                    prefs.edit()
+                                        .putString(
+                                            "userId",
+                                            userId
+                                        )
+                                        .putString(
+                                            "userName",
+                                            state.userName
+                                        )
+                                        .apply()
+
+                                    /*
+                                     * Prevent duplicate Zego initialization.
+                                     */
+                                    if (
+                                        zegoInitializedForUserId ==
+                                        userId
+                                    ) {
+                                        return@collect
+                                    }
+
+                                    zegoInitializedForUserId =
+                                        userId
+
+                                    launch(Dispatchers.Main) {
+
+                                        if (
+                                            isFinishing ||
+                                            isDestroyed
+                                        ) {
+                                            return@launch
+                                        }
+
+                                        try {
+
+                                            AppLogger.startup(
+                                                "Zego initialization START"
+                                            )
+
+                                            (application as KinChatApplication)
+                                                .initZegoCloud(
+                                                    userId = userId,
+                                                    userName = state.userName
+                                                )
+
+                                            AppLogger.startup(
+                                                "Zego initialization DONE"
+                                            )
+
+                                        } catch (e: Exception) {
+
+                                            AppLogger.e(
+                                                "ZegoCloud",
+                                                "Deferred Zego initialization failed: ${e.message}",
+                                                e
+                                            )
+                                        }
+                                    }
+                                }
+
+                                is AppAuthState.Unauthenticated -> {
+
+                                    prefs.edit()
+                                        .clear()
+                                        .apply()
+
+                                    zegoInitializedForUserId = null
+
+                                    launch(Dispatchers.Main) {
+
+                                        try {
+                                            ZegoUIKitPrebuiltCallService
+                                                .unInit()
+                                        } catch (e: Exception) {
+
+                                            AppLogger.e(
+                                                "ZegoCloud",
+                                                "ZegoCloud unInit failed: ${e.message}",
+                                                e
+                                            )
+                                        }
+                                    }
+                                }
+
+                                else -> {
+                                    // Unknown auth state: no action.
+                                }
+                            }
+                        }
+
+                } catch (e: Exception) {
+
+                    AppLogger.e(
+                        "StartupAuth",
+                        "Failed to observe authentication state: ${e.message}",
+                        e
+                    )
+                }
+            }
         }
     }
 
     override fun onNewIntent(intent: Intent) {
+
         super.onNewIntent(intent)
 
         setIntent(intent)
+
         handleNotificationIntent(intent)
     }
 
-    private fun handleNotificationIntent(intent: Intent?) {
+    private fun handleNotificationIntent(
+        intent: Intent?
+    ) {
+
         val chatId = intent
             ?.getStringExtra("chat_id")
             ?.trim()
