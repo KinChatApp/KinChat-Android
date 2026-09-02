@@ -8,6 +8,7 @@ import com.kinchat.app.domain.model.Chat
 import com.kinchat.app.domain.repository.DashboardRepository
 import com.kinchat.app.domain.repository.ChatRepository
 import com.kinchat.app.domain.usecase.ContactsUseCases
+import dagger.Lazy
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -15,6 +16,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -32,24 +35,25 @@ data class DashboardUiState(
 
 @HiltViewModel
 class DashboardViewModel @Inject constructor(
-    private val dashboardRepository: DashboardRepository,
-    private val chatRepository: ChatRepository,
-    private val contactsUseCases: ContactsUseCases
+    private val dashboardRepository: Lazy<DashboardRepository>,
+    private val chatRepository: Lazy<ChatRepository>,
+    private val contactsUseCases: Lazy<ContactsUseCases>
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(DashboardUiState())
     val uiState: StateFlow<DashboardUiState> = _uiState.asStateFlow()
 
     init {
+        AppLogger.d("DataFlowLog", "DashboardViewModel: init block started")
         loadChats()
     }
 
     fun syncContacts() {
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                val syncResult = contactsUseCases.syncDeviceContacts()
+                val syncResult = contactsUseCases.get().syncDeviceContacts()
                 if (syncResult.isSuccess) {
-                    contactsUseCases.loadRemoteContacts()
+                    contactsUseCases.get().loadRemoteContacts()
                 }
             } catch (e: Exception) {
                 AppLogger.d("DashboardViewModel", "Background sync skipped (likely no permissions yet)")
@@ -77,24 +81,35 @@ class DashboardViewModel @Inject constructor(
 
     private fun loadChats() {
         viewModelScope.launch(Dispatchers.Default) {
-            val contactsFlow = contactsUseCases.getContacts()
+            AppLogger.d("DataFlowLog", "DashboardViewModel: Launching contactsFlow")
+            val contactsFlow = contactsUseCases.get().getContacts()
+                .onStart { 
+                    AppLogger.d("DataFlowLog", "DashboardViewModel: contactsFlow onStart")
+                    emit(emptyList()) 
+                }
+                .onEach { AppLogger.d("DataFlowLog", "DashboardViewModel: contactsFlow emitted \${it.size} contacts") }
                 .catch {
                     AppLogger.e("DashboardViewModel", "Contacts flow error", it)
                     emit(emptyList())
                 }
 
-            val chatsFlow = dashboardRepository.getRecentChats()
+            AppLogger.d("DataFlowLog", "DashboardViewModel: Launching chatsFlow")
+            val chatsFlow = dashboardRepository.get().getRecentChats()
+                .onEach { AppLogger.d("DataFlowLog", "DashboardViewModel: chatsFlow emitted \${it.size} chats") }
                 .catch { e ->
                     _uiState.update { it.copy(isLoading = false, error = e.message) }
                     AppLogger.e("DashboardViewModel", "Chat flow error", e)
                     emit(emptyList())
                 }
 
+            AppLogger.d("DataFlowLog", "DashboardViewModel: Starting combine block")
             combine(contactsFlow, chatsFlow) { contacts, chatList ->
+                AppLogger.d("DataFlowLog", "DashboardViewModel: combine processing \${chatList.size} chats with \${contacts.size} contacts")
                 chatList.map { chat ->
                     chat.copy(name = ContactResolver.resolveChatName(chat, contacts))
                 }.sortedByDescending { it.isPinned }
             }.collect { finalChats ->
+                AppLogger.d("DataFlowLog", "DashboardViewModel: collect block triggered. Final UI update.")
                 _uiState.update { state ->
                     state.copy(
                         isLoading = false,
@@ -112,35 +127,35 @@ class DashboardViewModel @Inject constructor(
 
     fun pinChat(chatId: String) {
         viewModelScope.launch {
-            chatRepository.updateChatPinStatus(chatId, !(_uiState.value.allChats.find { it.id == chatId }?.isPinned ?: false))
+            chatRepository.get().updateChatPinStatus(chatId, !(_uiState.value.allChats.find { it.id == chatId }?.isPinned ?: false))
             closeContextMenu()
         }
     }
 
     fun favoriteChat(chatId: String) {
         viewModelScope.launch {
-            chatRepository.updateChatFavoriteStatus(chatId, !(_uiState.value.allChats.find { it.id == chatId }?.isFavorite ?: false))
+            chatRepository.get().updateChatFavoriteStatus(chatId, !(_uiState.value.allChats.find { it.id == chatId }?.isFavorite ?: false))
             closeContextMenu()
         }
     }
 
     fun archiveChat(chatId: String) {
         viewModelScope.launch {
-            chatRepository.updateChatArchiveStatus(chatId, !(_uiState.value.allChats.find { it.id == chatId }?.isArchived ?: false))
+            chatRepository.get().updateChatArchiveStatus(chatId, !(_uiState.value.allChats.find { it.id == chatId }?.isArchived ?: false))
             closeContextMenu()
         }
     }
 
     fun muteChat(chatId: String) {
         viewModelScope.launch {
-            chatRepository.updateChatMuteStatus(chatId, !(_uiState.value.allChats.find { it.id == chatId }?.isMuted ?: false))
+            chatRepository.get().updateChatMuteStatus(chatId, !(_uiState.value.allChats.find { it.id == chatId }?.isMuted ?: false))
             closeContextMenu()
         }
     }
 
     fun blockChat(chatId: String) {
         viewModelScope.launch {
-            chatRepository.updateChatBlockStatus(chatId, !(_uiState.value.allChats.find { it.id == chatId }?.isBlocked ?: false))
+            chatRepository.get().updateChatBlockStatus(chatId, !(_uiState.value.allChats.find { it.id == chatId }?.isBlocked ?: false))
             closeContextMenu()
         }
     }
@@ -157,7 +172,7 @@ class DashboardViewModel @Inject constructor(
         val chatId = _uiState.value.pendingDeleteChatId ?: return
         viewModelScope.launch {
             _uiState.update { it.copy(showConfirmDeleteDialog = false, pendingDeleteChatId = null) }
-            chatRepository.deleteChatParticipant(chatId)
+            chatRepository.get().deleteChatParticipant(chatId)
         }
     }
 }

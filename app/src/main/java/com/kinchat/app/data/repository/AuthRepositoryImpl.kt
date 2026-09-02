@@ -131,6 +131,12 @@ class AuthRepositoryImpl @Inject constructor(
                     val user = status.session.user
                     val currentUserId = user?.id?.replace("-", "")?.trim() ?: ""
                     val currentUserName = user?.phone ?: user?.email ?: "KinChat User"
+
+                    // 🚀 FIX 1: Ensure meId is written to DataStore on cold starts
+                    if (currentUserId.isNotBlank()) {
+                        authPreferencesManager.setMeId(currentUserId)
+                    }
+
                     AppAuthState.Authenticated(currentUserId, currentUserName)
                 }
                 is SessionStatus.NotAuthenticated -> AppAuthState.Unauthenticated

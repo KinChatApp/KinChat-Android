@@ -20,9 +20,11 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -82,23 +84,29 @@ class DashboardRepositoryImpl @Inject constructor(
     @OptIn(ExperimentalCoroutinesApi::class)
     private val cachedChatsFlow: StateFlow<List<Chat>> = authPreferencesManager.meId
         .filterNotNull()
+        .filter { it.isNotBlank() }
         .distinctUntilChanged()
+        .onEach { AppLogger.d("DataFlowLog", "DashboardRepository: meId received -> \$it") }
         .flatMapLatest { currentUserId ->
             safeScope.launch {
                 try {
+                    AppLogger.d("DataFlowLog", "DashboardRepository: Starting syncDashboardChats")
                     syncManager.syncDashboardChats(currentUserId)
+                    AppLogger.d("DataFlowLog", "DashboardRepository: Finished syncDashboardChats")
                 } catch (e: Exception) {}
             }
 
+            AppLogger.d("DataFlowLog", "DashboardRepository: Calling observeAllChatsFlow")
             chatDao.observeAllChatsFlow(currentUserId)
+                .onEach { AppLogger.d("DataFlowLog", "DashboardRepository: chatDao emitted \${it.size} items") }
                 .map { previews ->
                     previews.map { it.toDomainModel(currentUserId) }
                 }
-                .distinctUntilChanged() // 🚀 FIX: Prevent identical list emissions causing Recomposition
+                .distinctUntilChanged()
         }
         .stateIn(
             scope = safeScope,
-            started = SharingStarted.Eagerly,
+            started = SharingStarted.WhileSubscribed(5_000),
             initialValue = emptyList()
         )
 

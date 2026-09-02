@@ -16,6 +16,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
@@ -40,9 +41,11 @@ fun DashboardScreen(
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
 
-    // 🚀 ড্যাশবোর্ড থেকে অটোমেটিক পারমিশন পপআপ রিমুভ করা হয়েছে। 
-    // তবে আগে থেকে পারমিশন দেওয়া থাকলে সাইলেন্টলি সিঙ্ক করবে।
+    // 🚀 FIX: arbitrary delay(1500L) সরিয়ে ২টা ফ্রেম wait করা হচ্ছে, যাতে
+    // initial Dashboard composition settle হওয়ার সুযোগ পায় কিন্তু fixed delay না থাকে।
     LaunchedEffect(Unit) {
+        withFrameNanos { }
+        withFrameNanos { }
         val isGranted = ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED
         if (isGranted) {
             viewModel.syncContacts()
